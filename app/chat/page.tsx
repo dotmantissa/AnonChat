@@ -20,6 +20,7 @@ import {
   Smile,
   Users,
 } from "lucide-react";
+import { MessageSkeleton, RoomListSkeleton } from "@/components/chat-skeleton";
 
 type ChatPreview = {
   id: string;
@@ -53,6 +54,7 @@ interface DBMessage {
   user_id: string;
   content: string;
   created_at: string;
+  status?: "sent" | "delivered" | "read";
 }
 
 export default function ChatPage() {
@@ -86,7 +88,7 @@ export default function ChatPage() {
         minute: "2-digit",
         hour12: false,
       }),
-      status: "read",
+      status: message.status || "sent",
     }),
     [currentUser?.id],
   );
@@ -347,12 +349,18 @@ export default function ChatPage() {
 
   const handleComposerKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      // Handle Enter key for sending message (only when not combined with Shift)
       if (event.key === "Enter" && !event.shiftKey) {
         event.preventDefault();
-        void handleSendMessage();
+        // Only send if there's actual content to send
+        if (inputMessage.trim()) {
+          void handleSendMessage();
+        }
       }
+      // Allow Shift+Enter to create new lines (default behavior)
+      // Also allow other keyboard shortcuts like Ctrl+C, Ctrl+V, etc.
     },
-    [handleSendMessage],
+    [handleSendMessage, inputMessage],
   );
 
   const filteredChats = useMemo(() => {
@@ -411,11 +419,7 @@ export default function ChatPage() {
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-2">
-                  {isLoadingRooms && (
-                    <div className="flex items-center justify-center h-full text-muted-foreground">
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                    </div>
-                  )}
+                                   {isLoadingRooms && <RoomListSkeleton />}
 
                   {!isLoadingRooms && filteredChats.length === 0 && (
                     <div className="p-4 text-sm text-muted-foreground">No groups found.</div>
@@ -565,7 +569,8 @@ export default function ChatPage() {
                             <span>{message.time}</span>
                             {message.author === "me" && (
                               <span aria-label={`Delivery status: ${message.status}`}>
-                                {message.status === "sending" ? "..." : "✓✓"}
+                                {message.status === "sending" ? "..." : 
+                                 message.status === "sent" ? "✓" : "✓✓"}
                               </span>
                             )}
                           </div>
@@ -596,7 +601,7 @@ export default function ChatPage() {
                         onChange={(event) => setInputMessage(event.target.value)}
                         onKeyDown={handleComposerKeyDown}
                         rows={1}
-                        placeholder="Type a message"
+                        placeholder="Type a message (Enter to send, Shift+Enter for new line)"
                         className="flex-1 min-h-10 max-h-32 resize-none rounded-2xl border border-border/80 bg-background px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/30"
                       />
 
