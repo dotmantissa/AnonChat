@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  connect,
   disconnect,
   getPublicKey,
   signMessage,
@@ -10,11 +9,13 @@ import { useEffect, useState } from "react";
 import { toast } from "react-hot-toast";
 import { createClient } from "@/lib/supabase/client";
 import { WalletAddress } from "@/components/wallet-address";
+import { WalletSelectionModal } from "@/components/wallet-selection-modal";
 
 export default function ConnectWallet() {
   const [publicKey, setPublicKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [authenticating, setAuthenticating] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const supabase = createClient();
 
   // ── Wallet signature login flow ───────────────────────────────────────────
@@ -82,20 +83,23 @@ export default function ConnectWallet() {
   }
 
   async function handleConnect() {
-    await connect(async () => {
-      try {
-        const key = await getPublicKey();
-        if (key) {
-          await authenticateWithWallet(key);
-        } else {
-          setLoading(false);
-        }
-      } catch (error) {
-        console.error("Connection error:", error);
+    setIsModalOpen(true);
+  }
+
+  async function handleConnectSuccess() {
+    try {
+      const key = await getPublicKey();
+      if (key) {
+        await authenticateWithWallet(key);
+      } else {
         setLoading(false);
       }
-    });
+    } catch (error) {
+      console.error("Connection error:", error);
+      setLoading(false);
+    }
   }
+
 
   async function handleDisconnect() {
     setLoading(true);
@@ -161,6 +165,13 @@ export default function ConnectWallet() {
       )}
 
       {loading && <div className="p-2 text-sm opacity-60">Loading…</div>}
+
+      <WalletSelectionModal
+        isOpen={isModalOpen}
+        onOpenChange={setIsModalOpen}
+        onConnectSuccess={handleConnectSuccess}
+      />
     </div>
+
   );
 }
