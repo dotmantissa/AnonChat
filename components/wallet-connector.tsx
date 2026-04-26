@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 import { toast } from "react-hot-toast";
 import { createClient } from "@/lib/supabase/client";
 import { WalletAddress } from "@/components/wallet-address";
+import { handleAppError } from "@/lib/error-handler";
 
 export default function ConnectWallet() {
   const [publicKey, setPublicKey] = useState<string | null>(null);
@@ -29,13 +30,12 @@ export default function ConnectWallet() {
       });
 
       if (!nonceRes.ok) {
-        const { error } = await nonceRes.json();
-        throw new Error(error ?? "Failed to get nonce");
+        throw new Error("AUTH_SERVER_UNREACHABLE");
       }
 
       const { nonce } = await nonceRes.json();
 
-      // 2. Prompt the user to sign the nonce with their wallet
+      // 2. Prompt user to sign
       toast("Sign the message in your wallet to verify ownership…", {
         icon: "✍️",
         duration: 6000,
@@ -43,7 +43,7 @@ export default function ConnectWallet() {
 
       const signature = await signMessage(nonce);
 
-      // 3. Send the signature to the server for verification + session creation
+      // 3. Verify signature and create session
       const loginRes = await fetch("/api/auth/wallet-login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -51,13 +51,12 @@ export default function ConnectWallet() {
       });
 
       if (!loginRes.ok) {
-        const { error } = await loginRes.json();
-        throw new Error(error ?? "Authentication failed");
+        throw new Error("VERIFICATION_FAILED");
       }
 
       const { session, isNewUser } = await loginRes.json();
 
-      // 4. Persist the Supabase session on the client
+      // 4. Persist Supabase session on the client
       if (session) {
         await supabase.auth.setSession(session);
       }
@@ -70,9 +69,10 @@ export default function ConnectWallet() {
         { duration: 3000 },
       );
     } catch (err: any) {
-      console.error("[wallet-auth] Authentication failed:", err);
-      toast.error(err.message ?? "Wallet authentication failed");
-      // Disconnect so the user can retry
+      // The firewall strips technical details and shows clean UI feedback
+      handleAppError(err, "WALLET_CONNECT");
+
+      // Clean up wallet state so user can retry
       await disconnect();
       setPublicKey(null);
     } finally {
@@ -82,16 +82,24 @@ export default function ConnectWallet() {
   }
 
   async function handleConnect() {
+    // Immediate network check
+    if (!window.navigator.onLine) {
+      handleAppError(new Error("offline"), "NETWORK");
+      return;
+    }
+
     await connect(async () => {
       try {
         const key = await getPublicKey();
         if (key) {
           await authenticateWithWallet(key);
         } else {
+          // Triggered if the wallet kit returns without a key
+          handleAppError(new Error("No public key found"), "WALLET_CONNECT");
           setLoading(false);
         }
       } catch (error) {
-        console.error("Connection error:", error);
+        handleAppError(error, "WALLET_CONNECT");
         setLoading(false);
       }
     });
@@ -103,7 +111,8 @@ export default function ConnectWallet() {
       try {
         await supabase.auth.signOut();
       } catch (error) {
-        console.error("Error signing out from Supabase:", error);
+        // Silently log Supabase errors to console to avoid bothering user on exit
+        console.error("Supabase signout error:", error);
       }
       setPublicKey(null);
       setLoading(false);
@@ -111,14 +120,12 @@ export default function ConnectWallet() {
     });
   }
 
-  // Restore wallet state on mount (no re-authentication needed if session exists)
+  // Restore wallet state on mount
   useEffect(() => {
     (async () => {
       try {
         const key = await getPublicKey();
-        if (key) {
-          setPublicKey(key);
-        }
+        if (key) setPublicKey(key);
       } catch (error) {
         console.error("Initial wallet check failed:", error);
       } finally {
@@ -142,7 +149,7 @@ export default function ConnectWallet() {
             />
           </div>
           <button
-            className="bg-linear-to-r from-primary/50 to-accent/70 p-2 rounded-xl h-10 px-4 self-center"
+            className="bg-linear-to-r from-primary/50 to-accent/70 p-2 rounded-xl h-10 px-4 self-center transition-opacity hover:opacity-80"
             onClick={handleDisconnect}
           >
             Disconnect
@@ -154,7 +161,7 @@ export default function ConnectWallet() {
         <button
           onClick={handleConnect}
           disabled={authenticating}
-          className="bg-linear-to-r from-primary to-accent p-2 rounded-2xl px-8 disabled:opacity-60"
+          className="bg-linear-to-r from-primary to-accent p-2 rounded-2xl px-8 disabled:opacity-60 transition-all hover:shadow-lg active:scale-95"
         >
           {authenticating ? "Verifying…" : "Connect"}
         </button>
