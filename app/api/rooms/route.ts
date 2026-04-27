@@ -123,6 +123,7 @@ export async function POST(request: NextRequest) {
     let blockchainSubmitted = false;
     let explorerUrl: string | null = null;
     let actualFeeCharged: string | null = null;
+    let memoGroupId: string | null = null;
 
     try {
       const result = await submitMetadataHash(room.id, metadataHash, max_fee);
@@ -132,16 +133,47 @@ export async function POST(request: NextRequest) {
         actualFeeCharged = result.feeCharged || null;
         blockchainSubmitted = true;
         explorerUrl = getTransactionExplorerUrl(result.transactionHash);
+        memoGroupId = result.memoGroupId ?? null;
 
-        // Update room record with blockchain info
+        // Update room record with blockchain info, including the memo group ID
         await supabase
           .from("rooms")
           .update({
             stellar_tx_hash: stellarTxHash,
             metadata_hash: metadataHash,
             blockchain_submitted_at: new Date().toISOString(),
+            memo_group_id: result.memoGroupId ?? null,
           })
           .eq("id", room.id);
+
+        // Persist the groupId <-> transactionId mapping for fast lookups
+        if (result.memoGroupId) {
+          const { error: memoInsertError } = await supabase
+            .from("group_tx_memos")
+            .insert({
+              group_id: room.id,
+              memo_group_id: result.memoGroupId,
+              tx_hash: stellarTxHash,
+            });
+
+          if (memoInsertError) {
+            // Non-fatal: log but don't fail the request
+            logBlockchainOperation(
+              "warn",
+              "Failed to persist group_tx_memos record",
+              {
+                groupId: room.id,
+                memoGroupId: result.memoGroupId,
+                transactionHash: stellarTxHash,
+                error: {
+                  type: "DatabaseError",
+                  message: memoInsertError.message,
+                },
+              },
+              correlationId,
+            );
+          }
+        }
 
         logBlockchainOperation(
           "info",
@@ -149,6 +181,7 @@ export async function POST(request: NextRequest) {
           {
             groupId: room.id,
             transactionHash: stellarTxHash,
+            memoGroupId: result.memoGroupId,
           },
           correlationId,
         );
@@ -188,6 +221,7 @@ export async function POST(request: NextRequest) {
           ...room,
           stellar_tx_hash: stellarTxHash,
           metadata_hash: metadataHash,
+          memo_group_id: memoGroupId,
         },
         success: true,
         blockchain: {
@@ -195,6 +229,7 @@ export async function POST(request: NextRequest) {
           transactionHash: stellarTxHash || undefined,
           feeCharged: actualFeeCharged || undefined,
           explorerUrl: explorerUrl || undefined,
+          memoGroupId: memoGroupId || undefined,
         },
       },
       { status: 201 },
