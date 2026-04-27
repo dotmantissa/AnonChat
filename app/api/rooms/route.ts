@@ -13,6 +13,13 @@ import {
 
 export async function GET(request: NextRequest) {
   try {
+    // Check if Supabase is configured (not dummy)
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://dummy.supabase.co";
+    if (supabaseUrl.includes("dummy")) {
+      // Return empty rooms for demo mode without Supabase
+      return NextResponse.json({ rooms: [] });
+    }
+
     const supabase = await createClient();
 
     const {
@@ -60,6 +67,16 @@ export async function POST(request: NextRequest) {
   const correlationId = generateCorrelationId();
 
   try {
+    // Check if Supabase is configured (not dummy)
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://dummy.supabase.co";
+    if (supabaseUrl.includes("dummy")) {
+      // Return error in demo mode without Supabase
+      return NextResponse.json(
+        { error: "Room creation not available in demo mode. Please configure Supabase." },
+        { status: 503 },
+      );
+    }
+
     const supabase = await createClient();
 
     const {
