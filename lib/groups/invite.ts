@@ -5,23 +5,6 @@ export type InviteValidationResult =
   | { valid: true; roomId: string; inviteCode: string }
   | { valid: false; status: 400 | 404 | 410 | 429 | 500; error: string }
 
-export interface GenerateInviteOptions {
-  /** Seconds from now until the code expires. Omit for no time-based expiry. */
-  expiresIn?: number
-  /** Maximum number of times this code can be used. Omit for unlimited. */
-  maxUses?: number
-}
-
-export interface InviteRecord {
-  code: string
-  room_id: string
-  created_by: string
-  created_at: string
-  expires_at: string | null
-  max_uses: number | null
-  use_count: number
-}
-
 export function generateInviteCode(): string {
   return randomUUID()
 }
