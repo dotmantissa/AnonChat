@@ -8,10 +8,22 @@ interface Props {
   walletAddress: string;
   sdk: any;
   onSendToChain?: (text: string) => Promise<void>;
+  roomId?: string;
 }
 
-export const ChatWindow: React.FC<Props> = ({ walletAddress, sdk, onSendToChain }) => {
-  const { messages, addMessage } = useMessages();
+export const ChatWindow: React.FC<Props> = ({
+  walletAddress,
+  sdk,
+  onSendToChain,
+  roomId
+}) => {
+  const {
+    messages,
+    addMessage,
+    loadMoreMessages,
+    isLoading,
+    hasMore
+  } = useMessages({ roomId, pageSize: 50 });
 
   useChatSubscription(sdk, addMessage);
 
@@ -26,7 +38,12 @@ export const ChatWindow: React.FC<Props> = ({ walletAddress, sdk, onSendToChain 
 
   return (
     <div className='flex flex-col h-full bg-gray-950 text-gray-100'>
-      <MessageList messages={messages} />
+      <MessageList
+        messages={messages}
+        onLoadMore={loadMoreMessages}
+        isLoading={isLoading}
+        hasMore={hasMore}
+      />
       <MessageInput onSend={handleSend} />
     </div>
   );

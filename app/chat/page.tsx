@@ -89,6 +89,7 @@ export default function ChatPage() {
   >({});
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const previousScrollHeightRef = useRef<number>(0);
 
   const transformToChatMessage = useCallback(
     (message: DBMessage): ChatMessage => ({
@@ -188,37 +189,74 @@ export default function ChatPage() {
     }
   }, [fetchRoomLastMessagePreview]);
 
+  const [messageOffsets, setMessageOffsets] = useState<Record<string, number>>({});
+  const [hasMoreMessages, setHasMoreMessages] = useState<Record<string, boolean>>({});
+  const [isLoadingMoreMessages, setIsLoadingMoreMessages] = useState(false);
+
   const fetchMessagesForRoom = useCallback(
-    async (roomId: string) => {
-      setIsLoadingMessages(true);
+    async (roomId: string, offset = 0, append = false) => {
+      if (offset === 0) {
+        setIsLoadingMessages(true);
+      } else {
+        setIsLoadingMoreMessages(true);
+      }
+      
       try {
+        const pageSize = 50;
         const response = await fetch(
-          `/api/messages?room_id=${encodeURIComponent(roomId)}&limit=100&offset=0`,
+          `/api/messages?room_id=${encodeURIComponent(roomId)}&limit=${pageSize}&offset=${offset}`,
         );
         const data = await response.json();
         if (!response.ok || data.error) {
           throw new Error(data.error || "Failed to fetch messages");
         }
 
-        const parsed = (data.messages || [])
-          .map(transformToChatMessage)
-          .reverse();
+        const fetchedMessages = data.messages || [];
+        const parsed = fetchedMessages.map(transformToChatMessage).reverse();
 
         setMessagesByChat((prev) => ({
           ...prev,
-          [roomId]: parsed,
+          [roomId]: append ? [...parsed, ...(prev[roomId] || [])] : parsed,
+        }));
+
+        setMessageOffsets((prev) => ({
+          ...prev,
+          [roomId]: offset + fetchedMessages.length,
+        }));
+
+        setHasMoreMessages((prev) => ({
+          ...prev,
+          [roomId]: fetchedMessages.length === pageSize,
         }));
       } catch (error) {
         console.error("Failed to fetch messages", error);
-        setMessagesByChat((prev) => ({
-          ...prev,
-          [roomId]: [],
-        }));
+        if (!append) {
+          setMessagesByChat((prev) => ({
+            ...prev,
+            [roomId]: [],
+          }));
+        }
       } finally {
         setIsLoadingMessages(false);
+        setIsLoadingMoreMessages(false);
       }
     },
     [transformToChatMessage],
+  );
+
+  const loadMoreMessages = useCallback(
+    async (roomId: string) => {
+      if (isLoadingMoreMessages || !hasMoreMessages[roomId]) return;
+      
+      const container = scrollContainerRef.current;
+      if (container) {
+        previousScrollHeightRef.current = container.scrollHeight;
+      }
+      
+      const currentOffset = messageOffsets[roomId] || 0;
+      await fetchMessagesForRoom(roomId, currentOffset, true);
+    },
+    [isLoadingMoreMessages, hasMoreMessages, messageOffsets, fetchMessagesForRoom],
   );
 
   const fetchMemberCount = useCallback(async (roomId: string) => {
@@ -267,9 +305,19 @@ export default function ChatPage() {
   useEffect(() => {
     if (scrollContainerRef.current) {
       const container = scrollContainerRef.current;
-      container.scrollTop = container.scrollHeight;
+      
+      // Restore scroll position after loading more messages
+      if (previousScrollHeightRef.current > 0 && !isLoadingMoreMessages) {
+        const newScrollHeight = container.scrollHeight;
+        const scrollDiff = newScrollHeight - previousScrollHeightRef.current;
+        container.scrollTop = scrollDiff;
+        previousScrollHeightRef.current = 0;
+      } else if (!isLoadingMoreMessages) {
+        // Scroll to bottom for new messages or initial load
+        container.scrollTop = container.scrollHeight;
+      }
     }
-  }, [selectedChatId, messagesByChat]);
+  }, [selectedChatId, messagesByChat, isLoadingMoreMessages]);
 
   const handleSelectChat = useCallback((chatId: string) => {
     setSelectedChatId(chatId);
@@ -548,7 +596,28 @@ export default function ChatPage() {
                   <div
                     ref={scrollContainerRef}
                     className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3 bg-gradient-to-b from-background/40 to-background"
+                    onScroll={(e) => {
+                      const container = e.currentTarget;
+                      // Load more when scrolled near top (within 100px)
+                      if (container.scrollTop < 100 && selectedChatId) {
+                        loadMoreMessages(selectedChatId);
+                      }
+                    }}
                   >
+                    {/* Loading indicator for pagination */}
+                    {isLoadingMoreMessages && (
+                      <div className="flex justify-center py-2">
+                        <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                      </div>
+                    )}
+
+                    {/* Beginning of conversation indicator */}
+                    {!hasMoreMessages[selectedChatId || ''] && messages.length > 0 && (
+                      <p className="text-center text-muted-foreground text-xs py-2">
+                        Beginning of conversation
+                      </p>
+                    )}
+
                     {isLoadingMessages && (
                       <div className="h-full flex items-center justify-center text-muted-foreground">
                         <Loader2 className="h-5 w-5 animate-spin" />
