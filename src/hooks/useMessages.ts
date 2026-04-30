@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Message } from '../types/message';
 
 interface UseMessagesOptions {
@@ -6,27 +6,48 @@ interface UseMessagesOptions {
   pageSize?: number;
 }
 
+interface PaginationState {
+  offset: number;
+  hasMore: boolean;
+}
+
 export function useMessages(options: UseMessagesOptions = {}) {
   const { roomId, pageSize = 50 } = options;
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
-  const [offset, setOffset] = useState(0);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  
+  // Use refs to prevent race conditions and stale closures
+  const paginationRef = useRef<PaginationState>({ offset: 0, hasMore: true });
+  const loadingRef = useRef(false);
+  const firstMessageIdRef = useRef<string | null>(null);
 
-  // Load initial messages
+  // Load initial messages on roomId change
   useEffect(() => {
     if (roomId) {
+      // Reset pagination state
+      paginationRef.current = { offset: 0, hasMore: true };
+      firstMessageIdRef.current = null;
       loadMessages(0, true);
     }
   }, [roomId]);
 
   const loadMessages = useCallback(async (currentOffset: number, isInitial = false) => {
-    if (!roomId || isLoading) return;
+    if (!roomId) return;
+    
+    // Prevent concurrent requests
+    if (loadingRef.current) return;
+    
+    loadingRef.current = true;
+    if (isInitial) {
+      setIsLoading(true);
+    } else {
+      setIsLoadingMore(true);
+    }
 
-    setIsLoading(true);
     try {
       const response = await fetch(
-        `/api/messages?room_id=${roomId}&limit=${pageSize}&offset=${currentOffset}`
+        `/api/messages?room_id=${encodeURIComponent(roomId)}&limit=${pageSize}&offset=${currentOffset}`
       );
       
       if (!response.ok) {
@@ -46,28 +67,47 @@ export function useMessages(options: UseMessagesOptions = {}) {
         isEncrypted: msg.is_encrypted || false,
       }));
 
-      if (isInitial) {
-        // Reverse for chronological order (API returns descending)
-        setMessages(transformedMessages.reverse());
-      } else {
-        // Prepend older messages (they come in descending order, so reverse them)
-        setMessages((prev) => [...transformedMessages.reverse(), ...prev]);
-      }
+      setMessages((prevMessages) => {
+        let newMessages: Message[];
+        
+        if (isInitial) {
+          // Reverse for chronological order (API returns descending)
+          newMessages = transformedMessages.reverse();
+        } else {
+          // Prepend older messages (they come in descending order, so reverse them)
+          newMessages = [...transformedMessages.reverse(), ...prevMessages];
+        }
 
-      setHasMore(fetchedMessages.length === pageSize);
-      setOffset(currentOffset + fetchedMessages.length);
+        // Track first message ID for scroll restoration
+        if (newMessages.length > 0 && transformedMessages.length > 0) {
+          firstMessageIdRef.current = transformedMessages[transformedMessages.length - 1]?.id || null;
+        }
+
+        return newMessages;
+      });
+
+      // Update pagination state
+      const hasMoreMessages = fetchedMessages.length === pageSize;
+      paginationRef.current = {
+        offset: currentOffset + fetchedMessages.length,
+        hasMore: hasMoreMessages,
+      };
     } catch (error) {
       console.error('Error loading messages:', error);
+      paginationRef.current.hasMore = false;
     } finally {
+      loadingRef.current = false;
       setIsLoading(false);
+      setIsLoadingMore(false);
     }
-  }, [roomId, pageSize, isLoading]);
+  }, [roomId, pageSize]);
 
   const loadMoreMessages = useCallback(() => {
-    if (hasMore && !isLoading) {
-      loadMessages(offset);
-    }
-  }, [hasMore, isLoading, offset, loadMessages]);
+    // Prevent loading if already loading or no more messages
+    if (loadingRef.current || !paginationRef.current.hasMore) return;
+    
+    loadMessages(paginationRef.current.offset, false);
+  }, [loadMessages]);
 
   const addMessage = useCallback((msg: Omit<Message, 'id' | 'timestamp'>) => {
     const newMsg: Message = {
@@ -83,6 +123,8 @@ export function useMessages(options: UseMessagesOptions = {}) {
     addMessage,
     loadMoreMessages,
     isLoading,
-    hasMore
+    isLoadingMore,
+    hasMore: paginationRef.current.hasMore,
+    firstMessageId: firstMessageIdRef.current,
   };
 }

@@ -77,7 +77,6 @@ export default function ChatPage() {
 
   const [currentUser, setCurrentUser] = useState<{ id: string } | null>(null);
   const [isLoadingRooms, setIsLoadingRooms] = useState(true);
-  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isSending, setIsSending] = useState(false);
 
   const [chats, setChats] = useState<ChatPreview[]>([]);
@@ -87,9 +86,14 @@ export default function ChatPage() {
   const [memberCountByRoom, setMemberCountByRoom] = useState<
     Record<string, number>
   >({});
-
+  
+  // Pagination state per room
+  const [messageOffsets, setMessageOffsets] = useState<Record<string, number>>({});
+  const [hasMoreMessages, setHasMoreMessages] = useState<Record<string, boolean>>({});
+  const [isLoadingMoreMessages, setIsLoadingMoreMessages] = useState<Record<string, boolean>>({});
+  const [isLoadingMessagesByRoom, setIsLoadingMessagesByRoom] = useState<Record<string, boolean>>({});
+  const loadingRef = useRef<Record<string, boolean>>({});
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const previousScrollHeightRef = useRef<number>(0);
 
   const transformToChatMessage = useCallback(
     (message: DBMessage): ChatMessage => ({
@@ -189,16 +193,16 @@ export default function ChatPage() {
     }
   }, [fetchRoomLastMessagePreview]);
 
-  const [messageOffsets, setMessageOffsets] = useState<Record<string, number>>({});
-  const [hasMoreMessages, setHasMoreMessages] = useState<Record<string, boolean>>({});
-  const [isLoadingMoreMessages, setIsLoadingMoreMessages] = useState(false);
-
   const fetchMessagesForRoom = useCallback(
     async (roomId: string, offset = 0, append = false) => {
+      // Prevent concurrent requests for the same room
+      if (loadingRef.current[roomId]) return;
+      
+      loadingRef.current[roomId] = true;
       if (offset === 0) {
-        setIsLoadingMessages(true);
+        setIsLoadingMessagesByRoom((prev) => ({ ...prev, [roomId]: true }));
       } else {
-        setIsLoadingMoreMessages(true);
+        setIsLoadingMoreMessages((prev) => ({ ...prev, [roomId]: true }));
       }
       
       try {
@@ -237,8 +241,9 @@ export default function ChatPage() {
           }));
         }
       } finally {
-        setIsLoadingMessages(false);
-        setIsLoadingMoreMessages(false);
+        loadingRef.current[roomId] = false;
+        setIsLoadingMessagesByRoom((prev) => ({ ...prev, [roomId]: false }));
+        setIsLoadingMoreMessages((prev) => ({ ...prev, [roomId]: false }));
       }
     },
     [transformToChatMessage],
@@ -246,11 +251,13 @@ export default function ChatPage() {
 
   const loadMoreMessages = useCallback(
     async (roomId: string) => {
-      if (isLoadingMoreMessages || !hasMoreMessages[roomId]) return;
-      
-      const container = scrollContainerRef.current;
-      if (container) {
-        previousScrollHeightRef.current = container.scrollHeight;
+      // Guard against concurrent requests and missing data
+      if (
+        loadingRef.current[roomId] ||
+        isLoadingMoreMessages[roomId] ||
+        !hasMoreMessages[roomId]
+      ) {
+        return;
       }
       
       const currentOffset = messageOffsets[roomId] || 0;
@@ -302,19 +309,15 @@ export default function ChatPage() {
     fetchMemberCount,
   ]);
 
+  // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
-    if (scrollContainerRef.current) {
-      const container = scrollContainerRef.current;
-      
-      // Restore scroll position after loading more messages
-      if (previousScrollHeightRef.current > 0 && !isLoadingMoreMessages) {
-        const newScrollHeight = container.scrollHeight;
-        const scrollDiff = newScrollHeight - previousScrollHeightRef.current;
-        container.scrollTop = scrollDiff;
-        previousScrollHeightRef.current = 0;
-      } else if (!isLoadingMoreMessages) {
-        // Scroll to bottom for new messages or initial load
-        container.scrollTop = container.scrollHeight;
+    const messageContainer = document.querySelector('[data-message-container="true"]');
+    if (messageContainer && selectedChatId) {
+      const isLoadingMore = isLoadingMoreMessages[selectedChatId];
+      if (!isLoadingMore) {
+        requestAnimationFrame(() => {
+          messageContainer.scrollTop = messageContainer.scrollHeight;
+        });
       }
     }
   }, [selectedChatId, messagesByChat, isLoadingMoreMessages]);
@@ -593,75 +596,76 @@ export default function ChatPage() {
                     </div>
                   </header>
 
-                  <div
-                    ref={scrollContainerRef}
-                    className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3 bg-gradient-to-b from-background/40 to-background"
-                    onScroll={(e) => {
-                      const container = e.currentTarget;
-                      // Load more when scrolled near top (within 100px)
-                      if (container.scrollTop < 100 && selectedChatId) {
-                        loadMoreMessages(selectedChatId);
-                      }
-                    }}
-                  >
-                    {/* Loading indicator for pagination */}
-                    {isLoadingMoreMessages && (
-                      <div className="flex justify-center py-2">
-                        <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                      </div>
-                    )}
+                   <div
+                     ref={scrollContainerRef}
+                     data-message-container="true"
+                     className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3 bg-gradient-to-b from-background/40 to-background"
+                     onScroll={(e) => {
+                       const container = e.currentTarget;
+                       // Load more when scrolled near top (within 100px)
+                       if (container.scrollTop < 100 && selectedChatId && !isLoadingMoreMessages[selectedChatId]) {
+                         loadMoreMessages(selectedChatId);
+                       }
+                     }}
+                   >
+                     {/* Loading indicator for pagination */}
+                     {isLoadingMoreMessages[selectedChatId || ''] && (
+                       <div className="flex justify-center py-2">
+                         <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                       </div>
+                     )}
 
-                    {/* Beginning of conversation indicator */}
-                    {!hasMoreMessages[selectedChatId || ''] && messages.length > 0 && (
-                      <p className="text-center text-muted-foreground text-xs py-2">
-                        Beginning of conversation
-                      </p>
-                    )}
+                     {/* Beginning of conversation indicator */}
+                     {!hasMoreMessages[selectedChatId || ''] && messages.length > 0 && (
+                       <p className="text-center text-muted-foreground text-xs py-2">
+                         Beginning of conversation
+                       </p>
+                     )}
 
-                    {isLoadingMessages && (
-                      <div className="h-full flex items-center justify-center text-muted-foreground">
-                        <Loader2 className="h-5 w-5 animate-spin" />
-                      </div>
-                    )}
+                     {isLoadingMessagesByRoom[selectedChatId || ''] && (
+                       <div className="h-full flex items-center justify-center text-muted-foreground">
+                         <Loader2 className="h-5 w-5 animate-spin" />
+                       </div>
+                     )}
 
-                    {!isLoadingMessages && messages.length === 0 && (
-                      <div className="h-full flex items-center justify-center text-sm text-muted-foreground">
-                        No messages yet. Start the conversation.
-                      </div>
-                    )}
+                     {!isLoadingMessagesByRoom[selectedChatId || ''] && messages.length === 0 && (
+                       <div className="h-full flex items-center justify-center text-sm text-muted-foreground">
+                         No messages yet. Start the conversation.
+                       </div>
+                     )}
 
-                    {!isLoadingMessages &&
-                      messages.map((message) => (
-                        <div
-                          key={message.id}
-                          className={cn(
-                            "max-w-[85%] sm:max-w-[72%] rounded-2xl px-4 py-2.5 shadow-sm text-sm",
-                            message.author === "me"
-                              ? "ml-auto bg-primary text-primary-foreground rounded-br-sm"
-                              : "mr-auto bg-card border border-border/70 rounded-bl-sm",
-                          )}
-                        >
-                          <p className="whitespace-pre-wrap break-words leading-relaxed">
-                            {message.text}
-                          </p>
-                          <div
-                            className={cn(
-                              "mt-1 flex items-center justify-end gap-1 text-[10px]",
-                              message.author === "me"
-                                ? "text-primary-foreground/80"
-                                : "text-muted-foreground",
-                            )}
-                          >
-                            <span>{message.time}</span>
-                            {message.author === "me" && (
-                              <span>
-                                {message.status === "sending" ? "..." : "✓✓"}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                  </div>
+                     {!isLoadingMessagesByRoom[selectedChatId || ''] &&
+                       messages.map((message) => (
+                         <div
+                           key={message.id}
+                           className={cn(
+                             "max-w-[85%] sm:max-w-[72%] rounded-2xl px-4 py-2.5 shadow-sm text-sm",
+                             message.author === "me"
+                               ? "ml-auto bg-primary text-primary-foreground rounded-br-sm"
+                               : "mr-auto bg-card border border-border/70 rounded-bl-sm",
+                           )}
+                         >
+                           <p className="whitespace-pre-wrap break-words leading-relaxed">
+                             {message.text}
+                           </p>
+                           <div
+                             className={cn(
+                               "mt-1 flex items-center justify-end gap-1 text-[10px]",
+                               message.author === "me"
+                                 ? "text-primary-foreground/80"
+                                 : "text-muted-foreground",
+                             )}
+                           >
+                             <span>{message.time}</span>
+                             {message.author === "me" && (
+                               <span>
+                                 {message.status === "sending" ? "..." : "✓✓"}
+                               </span>
+                             )}
+                           </div>
+                         </div>
+                       ))}
+                   </div>
 
                   <div className="p-3 sm:p-4 border-t border-border/70 bg-card/80 backdrop-blur-sm">
                     <div className="flex items-end gap-2 sm:gap-3">
