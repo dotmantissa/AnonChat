@@ -15,8 +15,16 @@ export interface StellarTransactionResult {
   feeCharged?: string;
   /** The group memo embedded in the Stellar transaction (≤28 bytes). */
   memoGroupId?: string;
+  /** The audit memo embedded in the Stellar transaction (≤28 bytes). */
+  auditMemo?: string;
   error?: string;
 }
+
+export type AuditEventType =
+  | "group_created"
+  | "member_joined"
+  | "member_left"
+  | "member_removed";
 
 export interface StellarTransaction {
   hash: string;

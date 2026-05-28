@@ -10,6 +10,7 @@ import React, {
 import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
 import { ChatEmptyState } from "@/components/chat-empty-state";
+import { GroupAuditDialog } from "@/components/group-audit-dialog";
 import {
   PresenceIndicator,
   type PresenceStatus,
@@ -28,6 +29,7 @@ import {
   Search,
   SendHorizontal,
   Smile,
+  ScrollText,
   Users,
 } from "lucide-react";
 
@@ -70,6 +72,7 @@ export default function ChatPage() {
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [inputMessage, setInputMessage] = useState("");
   const [roomMembersOpen, setRoomMembersOpen] = useState(false);
+  const [auditTrailOpen, setAuditTrailOpen] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [activeMobileTab, setActiveMobileTab] = useState<
     "chats" | "conversation"
@@ -585,14 +588,24 @@ export default function ChatPage() {
                         </div>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => setRoomMembersOpen(true)}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-border/80 px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40"
-                      >
-                        <Users className="h-3.5 w-3.5" />
-                        Members
-                      </button>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setAuditTrailOpen(true)}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-border/80 px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40"
+                        >
+                          <ScrollText className="h-3.5 w-3.5" />
+                          Audit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRoomMembersOpen(true)}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-border/80 px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40"
+                        >
+                          <Users className="h-3.5 w-3.5" />
+                          Members
+                        </button>
+                      </div>
                     </div>
                   </header>
 
@@ -712,6 +725,11 @@ export default function ChatPage() {
                     roomId={selectedChat.id}
                     open={roomMembersOpen}
                     onOpenChange={setRoomMembersOpen}
+                  />
+                  <GroupAuditDialog
+                    groupId={selectedChat.id}
+                    open={auditTrailOpen}
+                    onOpenChange={setAuditTrailOpen}
                   />
                 </>
               )}

@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
 import { validateInviteCode, incrementInviteUseCount } from "@/lib/groups/invite"
+import { recordGroupAuditEvent } from "@/lib/blockchain/audit"
 
 export async function POST(request: NextRequest) {
   try {
@@ -58,7 +59,19 @@ export async function POST(request: NextRequest) {
       console.info(`[rooms/join] User ${user.id} joined room ${roomId} via invite code ${validatedCode}`)
     }
 
-    return NextResponse.json({ success: true, membership: membership?.[0] })
+    const auditEvent = await recordGroupAuditEvent({
+      supabase,
+      groupId: roomId as string,
+      eventType: "member_joined",
+      actorUserId: user.id,
+      targetUserId: user.id,
+      metadata: {
+        invite_code_used: validatedCode ?? null,
+        membership_id: membership?.[0]?.id ?? null,
+      },
+    })
+
+    return NextResponse.json({ success: true, membership: membership?.[0], audit: auditEvent ?? undefined })
   } catch (error) {
     console.error("POST /api/rooms/join error:", error)
     return NextResponse.json({ error: "Failed to join room" }, { status: 500 })

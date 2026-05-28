@@ -10,6 +10,7 @@ import {
   logBlockchainOperation,
   generateCorrelationId,
 } from "@/lib/blockchain/logger";
+import { recordGroupAuditEvent } from "@/lib/blockchain/audit";
 
 export async function GET(request: NextRequest) {
   try {
@@ -141,6 +142,7 @@ export async function POST(request: NextRequest) {
     let explorerUrl: string | null = null;
     let actualFeeCharged: string | null = null;
     let memoGroupId: string | null = null;
+    let auditEvent = null;
 
     try {
       const result = await submitMetadataHash(room.id, metadataHash, max_fee);
@@ -231,6 +233,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    auditEvent = await recordGroupAuditEvent({
+      supabase,
+      groupId: room.id,
+      eventType: "group_created",
+      actorUserId: user.id,
+      targetUserId: user.id,
+      maxFee: max_fee,
+      metadata: {
+        room_name: room.name,
+        is_private: room.is_private,
+        metadata_hash: metadataHash,
+        group_creation_transaction_hash: stellarTxHash,
+      },
+    });
+
     // Return success response with blockchain info
     return NextResponse.json(
       {
@@ -248,6 +265,7 @@ export async function POST(request: NextRequest) {
           explorerUrl: explorerUrl || undefined,
           memoGroupId: memoGroupId || undefined,
         },
+        audit: auditEvent || undefined,
       },
       { status: 201 },
     );
