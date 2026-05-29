@@ -17,7 +17,9 @@ import {
 import { RoomMembersDialog } from "@/components/room-members-dialog";
 import ConnectWallet from "@/components/wallet-connector";
 import { RoomActivityPanel } from "@/components/room-activity-panel";
+import { MessageSearchBar } from "@/components/message-search-bar";
 import { cn } from "@/lib/utils";
+import { highlightText } from "@/lib/highlight-text";
 import { handleAppError } from "@/lib/error-handler"; // Integrated Error Handler
 import {
   ArrowLeft,
@@ -79,6 +81,10 @@ export default function ChatPage() {
   const [currentUser, setCurrentUser] = useState<{ id: string } | null>(null);
   const [isLoadingRooms, setIsLoadingRooms] = useState(true);
   const [isSending, setIsSending] = useState(false);
+
+  // Message search state
+  const [messageSearchOpen, setMessageSearchOpen] = useState(false);
+  const [messageSearchQuery, setMessageSearchQuery] = useState("");
 
   const [chats, setChats] = useState<ChatPreview[]>([]);
   const [messagesByChat, setMessagesByChat] = useState<
@@ -444,6 +450,26 @@ export default function ChatPage() {
 
   const messages = selectedChat ? messagesByChat[selectedChat.id] || [] : [];
 
+  // Filter messages by search query (client-side, over loaded messages)
+  const filteredMessages = useMemo(() => {
+    if (!messageSearchQuery.trim()) return messages;
+    const lowered = messageSearchQuery.toLowerCase();
+    return messages.filter((msg) =>
+      msg.text.toLowerCase().includes(lowered),
+    );
+  }, [messages, messageSearchQuery]);
+
+  const handleCloseSearch = useCallback(() => {
+    setMessageSearchOpen(false);
+    setMessageSearchQuery("");
+  }, []);
+
+  // Reset search when switching rooms
+  useEffect(() => {
+    setMessageSearchQuery("");
+    setMessageSearchOpen(false);
+  }, [selectedChatId]);
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Header />
@@ -586,16 +612,41 @@ export default function ChatPage() {
                         </div>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => setRoomMembersOpen(true)}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-border/80 px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40"
-                      >
-                        <Users className="h-3.5 w-3.5" />
-                        Members
-                      </button>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {/* Search messages toggle */}
+                        <button
+                          type="button"
+                          aria-label="Search messages"
+                          aria-pressed={messageSearchOpen}
+                          onClick={() => setMessageSearchOpen((prev) => !prev)}
+                          className={cn(
+                            "inline-flex items-center justify-center h-8 w-8 rounded-lg border border-border/80 text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors",
+                            messageSearchOpen && "bg-primary/10 border-primary/30 text-primary",
+                          )}
+                        >
+                          <Search className="h-3.5 w-3.5" />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setRoomMembersOpen(true)}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-border/80 px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40"
+                        >
+                          <Users className="h-3.5 w-3.5" />
+                          Members
+                        </button>
+                      </div>
                     </div>
                   </header>
+
+                  {/* Collapsible message search bar */}
+                  <MessageSearchBar
+                    isVisible={messageSearchOpen}
+                    value={messageSearchQuery}
+                    onChange={setMessageSearchQuery}
+                    onClose={handleCloseSearch}
+                    resultCount={filteredMessages.length}
+                  />
 
                   <div className="px-4 sm:px-5 pt-3">
                     <RoomActivityPanel roomId={selectedChatId} />
@@ -620,8 +671,8 @@ export default function ChatPage() {
                        </div>
                      )}
 
-                     {/* Beginning of conversation indicator */}
-                     {!hasMoreMessages[selectedChatId || ''] && messages.length > 0 && (
+                     {/* Beginning of conversation indicator — only when not searching */}
+                     {!messageSearchQuery.trim() && !hasMoreMessages[selectedChatId || ''] && messages.length > 0 && (
                        <p className="text-center text-muted-foreground text-xs py-2">
                          Beginning of conversation
                        </p>
@@ -639,8 +690,18 @@ export default function ChatPage() {
                        </div>
                      )}
 
+                     {/* Search: no results state */}
                      {!isLoadingMessagesByRoom[selectedChatId || ''] &&
-                       messages.map((message) => (
+                       messageSearchQuery.trim() &&
+                       filteredMessages.length === 0 && (
+                         <div className="h-full flex flex-col items-center justify-center gap-2 text-muted-foreground">
+                           <Search className="h-8 w-8 opacity-30" />
+                           <p className="text-sm">No messages match &ldquo;{messageSearchQuery}&rdquo;</p>
+                         </div>
+                       )}
+
+                     {!isLoadingMessagesByRoom[selectedChatId || ''] &&
+                       filteredMessages.map((message) => (
                          <div
                            key={message.id}
                            className={cn(
@@ -651,7 +712,7 @@ export default function ChatPage() {
                            )}
                          >
                            <p className="whitespace-pre-wrap break-words leading-relaxed">
-                             {message.text}
+                             {highlightText(message.text, messageSearchQuery)}
                            </p>
                            <div
                              className={cn(
