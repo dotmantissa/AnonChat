@@ -26,6 +26,7 @@ export default function ConnectWallet() {
       // 1. Request a nonce from the server
       const nonceRes = await fetch("/api/auth/nonce", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ walletAddress: address }),
       });
@@ -47,6 +48,7 @@ export default function ConnectWallet() {
       // 3. Verify signature and create session
       const loginRes = await fetch("/api/auth/wallet-login", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ walletAddress: address, signature }),
       });
@@ -61,6 +63,8 @@ export default function ConnectWallet() {
       if (session) {
         await supabase.auth.setSession(session);
       }
+
+      // Wallet JWTs are set as httpOnly cookies by the server
 
       setPublicKey(address);
       toast.success(
@@ -112,6 +116,11 @@ export default function ConnectWallet() {
     setLoading(true);
     await disconnect(async () => {
       try {
+        await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+      } catch (error) {
+        console.error("Wallet JWT logout error:", error);
+      }
+      try {
         await supabase.auth.signOut();
       } catch (error) {
         // Silently log Supabase errors to console to avoid bothering user on exit
@@ -123,12 +132,29 @@ export default function ConnectWallet() {
     });
   }
 
-  // Restore wallet state on mount
+  async function refreshWalletSession() {
+    try {
+      const res = await fetch("/api/auth/refresh", {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        console.warn("[wallet-auth] session refresh failed:", res.status);
+      }
+    } catch (error) {
+      console.error("[wallet-auth] session refresh error:", error);
+    }
+  }
+
+  // Restore wallet state on mount; refresh JWT before access token expires
   useEffect(() => {
     (async () => {
       try {
         const key = await getPublicKey();
-        if (key) setPublicKey(key);
+        if (key) {
+          setPublicKey(key);
+          await refreshWalletSession();
+        }
       } catch (error) {
         console.error("Initial wallet check failed:", error);
       } finally {
@@ -136,6 +162,15 @@ export default function ConnectWallet() {
       }
     })();
   }, []);
+
+  useEffect(() => {
+    if (!publicKey) return;
+    const intervalMs = 10 * 60 * 1000; // access token TTL is 15 minutes
+    const id = window.setInterval(() => {
+      void refreshWalletSession();
+    }, intervalMs);
+    return () => window.clearInterval(id);
+  }, [publicKey]);
 
   return (
     <div id="connect-wrap" className="wrap" aria-live="polite">
