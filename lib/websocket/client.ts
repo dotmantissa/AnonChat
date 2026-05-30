@@ -25,6 +25,10 @@ export class WebSocketClient {
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
   private clientId: string | null = null;
   private walletAddress: string | null = null;
+  private userId: string | null = null;
+  private displayName: string | null = null;
+  private avatarUrl: string | undefined = undefined;
+  private joinedRooms: Set<string> = new Set();
 
   constructor(url: string) {
     this.url = url;
@@ -49,6 +53,19 @@ export class WebSocketClient {
           this.reconnectAttempts = 0;
           this.reconnectDelay = INITIAL_RECONNECT_DELAY;
           this.setConnectionState("connected");
+
+          // Restore session on reconnect
+          if (this.userId && this.walletAddress && this.displayName) {
+            this.authenticate(this.userId, this.walletAddress, this.displayName, this.avatarUrl);
+          }
+          this.joinedRooms.forEach((roomId) => {
+            this.send({
+              type: "room_join",
+              payload: { roomId },
+              timestamp: Date.now(),
+            });
+          });
+
           resolve();
         };
 
@@ -178,7 +195,10 @@ export class WebSocketClient {
     displayName: string,
     avatarUrl?: string,
   ) {
+    this.userId = userId;
     this.walletAddress = walletAddress;
+    this.displayName = displayName;
+    this.avatarUrl = avatarUrl;
     this.send({
       type: "auth",
       payload: { userId, walletAddress, displayName, avatarUrl },
@@ -204,18 +224,22 @@ export class WebSocketClient {
   isConnected = () =>
     this.connectionState === "connected" &&
     this.ws?.readyState === WebSocket.OPEN;
-  joinRoom = (roomId: string) =>
+  joinRoom = (roomId: string) => {
+    this.joinedRooms.add(roomId);
     this.send({
       type: "room_join",
       payload: { roomId },
       timestamp: Date.now(),
     });
-  leaveRoom = (roomId: string) =>
+  };
+  leaveRoom = (roomId: string) => {
+    this.joinedRooms.delete(roomId);
     this.send({
       type: "leave_room",
       payload: { roomId },
       timestamp: Date.now(),
     });
+  };
   notifyTyping = (roomId: string) =>
     this.send({ type: "typing", payload: { roomId }, timestamp: Date.now() });
   notifyStopTyping = (roomId: string) =>

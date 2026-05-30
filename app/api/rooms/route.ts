@@ -113,6 +113,19 @@ export async function POST(request: NextRequest) {
 
     const room = data[0];
 
+    // Log group creation as a separate activity record (not a chat message)
+    try {
+      await insertRoomActivity(supabase as unknown as SupabaseClient, {
+        room_id: room.id,
+        event_type: "group_created",
+        actor_user_id: user.id,
+        metadata: { name: room.name, is_private: room.is_private },
+      });
+    } catch (e) {
+      // Non-fatal: group creation should succeed even if activity logging fails
+      console.warn("[activity] failed to insert group_created log", e);
+    }
+
     // Prepare metadata for blockchain submission
     const metadata: GroupMetadata = {
       id: room.id,
