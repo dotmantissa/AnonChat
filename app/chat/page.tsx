@@ -500,33 +500,54 @@ export default function ChatPage() {
                           type="button"
                           onClick={() => handleSelectChat(chat.id)}
                           className={cn(
-                            "w-full text-left p-3 rounded-xl transition mb-1",
-                            "border border-transparent hover:bg-muted/40",
-                            isActive && "bg-primary/10 border-primary/25",
+                            "w-full text-left p-3 rounded-xl transition-all duration-150 mb-1",
+                            "border hover:bg-muted/40",
+                            isActive
+                              ? "bg-primary/10 border-primary/30 shadow-[inset_3px_0_0_hsl(var(--primary))]"
+                              : "border-transparent",
                           )}
                         >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-2">
-                                <PresenceIndicator status={chat.status} />
-                                <p className="font-medium text-sm truncate">
-                                  {chat.name}
-                                </p>
-                              </div>
-                              <p className="text-xs text-muted-foreground truncate mt-1">
-                                {chat.lastMessage}
-                              </p>
+                          <div className="flex items-start gap-2.5">
+                            <div
+                              className={cn(
+                                "shrink-0 h-9 w-9 rounded-full flex items-center justify-center text-sm font-semibold uppercase select-none",
+                                isActive
+                                  ? "bg-primary text-primary-foreground"
+                                  : "bg-muted text-muted-foreground",
+                              )}
+                            >
+                              {chat.name.charAt(0)}
                             </div>
 
-                            <div className="shrink-0 text-right">
-                              <p className="text-[11px] text-muted-foreground">
-                                {chat.lastSeen}
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center justify-between gap-1">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <PresenceIndicator status={chat.status} />
+                                  <p
+                                    className={cn(
+                                      "text-sm truncate",
+                                      isActive
+                                        ? "font-semibold text-foreground"
+                                        : "font-medium",
+                                    )}
+                                  >
+                                    {chat.name}
+                                  </p>
+                                </div>
+                                <div className="shrink-0 flex flex-col items-end gap-1">
+                                  <p className="text-[11px] text-muted-foreground whitespace-nowrap">
+                                    {chat.lastSeen}
+                                  </p>
+                                  {chat.unreadCount > 0 && (
+                                    <span className="inline-flex items-center justify-center min-w-5 h-5 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold px-1.5">
+                                      {chat.unreadCount}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <p className="text-xs text-muted-foreground truncate mt-0.5">
+                                {chat.lastMessage}
                               </p>
-                              {chat.unreadCount > 0 && (
-                                <span className="inline-flex items-center justify-center min-w-5 h-5 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold mt-1 px-1.5">
-                                  {chat.unreadCount}
-                                </span>
-                              )}
                             </div>
                           </div>
                         </button>
