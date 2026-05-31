@@ -7,6 +7,7 @@ export interface GroupMetadata {
   created_by: string;
   created_at: string;
   is_private: boolean;
+  owner_wallet?: string | null;
 }
 
 export interface StellarTransactionResult {
@@ -46,6 +47,7 @@ export interface GroupCreationResponse {
     is_private: boolean;
     created_by: string;
     created_at: string;
+    owner_wallet?: string | null;
     stellar_tx_hash: string | null;
     metadata_hash?: string | null;
     blockchain_submitted_at?: string | null;

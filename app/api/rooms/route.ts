@@ -99,6 +99,14 @@ export async function POST(request: NextRequest) {
     const createdAt = new Date().toISOString();
 
     // Insert group into database first
+    const walletAddress = (user as any)?.user_metadata?.wallet_address;
+    if (!walletAddress) {
+      return NextResponse.json(
+        { error: "Cannot determine owner wallet from authenticated session" },
+        { status: 401 },
+      );
+    }
+
     const { data, error } = await supabase
       .from("rooms")
       .insert({
@@ -107,6 +115,7 @@ export async function POST(request: NextRequest) {
         description,
         is_private: is_private || false,
         created_by: user.id,
+        owner_wallet: walletAddress,
       })
       .select();
 
@@ -135,6 +144,7 @@ export async function POST(request: NextRequest) {
       created_by: room.created_by,
       created_at: room.created_at,
       is_private: room.is_private,
+      owner_wallet: room.owner_wallet,
     };
 
     // Compute metadata hash
@@ -251,6 +261,7 @@ export async function POST(request: NextRequest) {
       {
         room: {
           ...room,
+          owner_wallet: walletAddress,
           stellar_tx_hash: stellarTxHash,
           metadata_hash: metadataHash,
           memo_group_id: memoGroupId,
