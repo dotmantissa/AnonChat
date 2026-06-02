@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
       message: `Cleanup completed. ${result.totalDeleted} messages deleted.`,
     });
   } catch (error) {
-    logger.error("Error in POST /api/ephemeral/cleanup:", error);
+    logger.error("Error in POST /api/ephemeral/cleanup:", error as Record<string, unknown>);
     return NextResponse.json(
       {
         error: "Internal server error",

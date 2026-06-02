@@ -4,7 +4,7 @@
  */
 
 import { createClient } from "@/lib/supabase/server";
-import { redis } from "@/lib/redis";
+import { getRedisClient } from "@/lib/redis";
 import { logger } from "@/lib/logger";
 import {
   EPHEMERAL_CONFIG,
@@ -271,6 +271,12 @@ export async function cleanupOldLogs(): Promise<void> {
  */
 export async function invalidateRoomMessageCache(roomId: string): Promise<void> {
   try {
+    const redisClient = await getRedisClient();
+    if (!redisClient) {
+      logger.debug(`Redis unavailable; skipping cache invalidation for room ${roomId}`);
+      return;
+    }
+
     // Clear any room-specific caches
     const cacheKeys = [
       `room:${roomId}:messages`,
@@ -281,11 +287,11 @@ export async function invalidateRoomMessageCache(roomId: string): Promise<void> 
     for (const key of cacheKeys) {
       if (key.includes("*")) {
         // Pattern delete
-        const cursor = await redis.scan(0, "MATCH", key);
+        const cursor = await redisClient.scan(0, "MATCH", key);
         // Note: Redis scan might need additional iteration for large datasets
         // For now, we'll use a simpler approach
       } else {
-        await redis.del(key);
+        await redisClient.del(key);
       }
     }
 
