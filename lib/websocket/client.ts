@@ -249,6 +249,13 @@ export class WebSocketClient {
       timestamp: Date.now(),
     });
 
+  requestPresenceSnapshot = () =>
+    this.send({
+      type: "request_presence_snapshot",
+      payload: {},
+      timestamp: Date.now(),
+    });
+
   /**
    * FIX FOR JOB 72926850335:
    * Add missing method to acknowledge message delivery

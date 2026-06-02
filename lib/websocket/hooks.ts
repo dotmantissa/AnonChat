@@ -159,6 +159,9 @@ export function useWebSocketSend() {
     notifyStopTyping: useCallback((roomId: string) => {
       client.current.notifyStopTyping(roomId);
     }, []),
+    requestPresenceSnapshot: useCallback(() => {
+      client.current.requestPresenceSnapshot();
+    }, []),
     /**
      * Resolves Job 72843331390 by calling the newly added method in WebSocketClient.
      */
