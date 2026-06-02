@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
 import { recordGroupAuditEvent } from "@/lib/blockchain/audit"
+import { getOrCreateUserAlias } from "@/lib/groups/nicknameGenerator"
 
 type MemberRow = {
   user_id: string
@@ -34,12 +35,20 @@ export async function GET(
 
     if (error) throw error
 
+    const membersWithAliases = await Promise.all(
+      ((members ?? []) as MemberRow[]).map(async (m) => {
+        const alias = await getOrCreateUserAlias(roomId, m.user_id)
+        return {
+          user_id: m.user_id,
+          alias,
+          joined_at: m.joined_at,
+          is_current_user: m.user_id === user.id,
+        }
+      })
+    )
+
     return NextResponse.json({
-      members: ((members ?? []) as MemberRow[]).map((m) => ({
-        user_id: m.user_id,
-        joined_at: m.joined_at,
-        is_current_user: m.user_id === user.id,
-      })),
+      members: membersWithAliases,
     })
   } catch (error) {
     console.error("[rooms/members] GET error:", error)
