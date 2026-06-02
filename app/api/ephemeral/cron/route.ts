@@ -2,16 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { logger } from "@/lib/logger";
 import { cleanupExpiredMessages } from "@/lib/ephemeral-cleanup";
 
-/**
- * Vercel Cron Route for ephemeral message cleanup
- * Configure in vercel.json: 
- * {
- *   "crons": [{
- *     "path": "/api/ephemeral/cron",
- *     "schedule": "0 */6 * * *"  // Every 6 hours
- *   }]
- * }
- */
+// Vercel Cron Route for ephemeral message cleanup
+// Configure in vercel.json:
+// {
+//   "crons": [{
+//     "path": "/api/ephemeral/cron",
+//     "schedule": "0 */6 * * *"  // Every 6 hours
+//   }]
+// }
 export async function GET(request: NextRequest) {
   // Verify request is from Vercel cron
   const authHeader = request.headers.get("Authorization");
