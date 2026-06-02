@@ -10,6 +10,7 @@ import React, {
 import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
 import { ChatEmptyState } from "@/components/chat-empty-state";
+import { GroupAuditDialog } from "@/components/group-audit-dialog";
 import {
   PresenceIndicator,
   type PresenceStatus,
@@ -31,6 +32,7 @@ import {
   Search,
   SendHorizontal,
   Smile,
+  ScrollText,
   Users,
 } from "lucide-react";
 
@@ -73,6 +75,7 @@ export default function ChatPage() {
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [inputMessage, setInputMessage] = useState("");
   const [roomMembersOpen, setRoomMembersOpen] = useState(false);
+  const [auditTrailOpen, setAuditTrailOpen] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [activeMobileTab, setActiveMobileTab] = useState<
     "chats" | "conversation"
@@ -633,21 +636,15 @@ export default function ChatPage() {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        {/* Search messages toggle */}
+                      <div className="flex shrink-0 items-center gap-2">
                         <button
                           type="button"
-                          aria-label="Search messages"
-                          aria-pressed={messageSearchOpen}
-                          onClick={() => setMessageSearchOpen((prev) => !prev)}
-                          className={cn(
-                            "inline-flex items-center justify-center h-8 w-8 rounded-lg border border-border/80 text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors",
-                            messageSearchOpen && "bg-primary/10 border-primary/30 text-primary",
-                          )}
+                          onClick={() => setAuditTrailOpen(true)}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-border/80 px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40"
                         >
-                          <Search className="h-3.5 w-3.5" />
+                          <ScrollText className="h-3.5 w-3.5" />
+                          Audit
                         </button>
-
                         <button
                           type="button"
                           onClick={() => setRoomMembersOpen(true)}
@@ -799,6 +796,11 @@ export default function ChatPage() {
                     roomId={selectedChat.id}
                     open={roomMembersOpen}
                     onOpenChange={setRoomMembersOpen}
+                  />
+                  <GroupAuditDialog
+                    groupId={selectedChat.id}
+                    open={auditTrailOpen}
+                    onOpenChange={setAuditTrailOpen}
                   />
                 </>
               )}
