@@ -1,21 +1,41 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import * as Dialog from "@radix-ui/react-dialog"
 import { Users, UserMinus, Loader2 } from "lucide-react"
 import toast from "react-hot-toast"
 import { cn } from "@/lib/utils"
+import { PresenceIndicator } from "@/components/presence-indicator"
+import { WalletAddress } from "@/components/wallet-address"
+import { useWebSocket, useWebSocketMessage, useWebSocketSend } from "@/lib/websocket/hooks"
 
 type Member = {
   user_id: string
   joined_at: string
   is_current_user: boolean
+  display_name: string | null
+  wallet_address: string | null
+  avatar_url: string | null
 }
 
 type VotesByTarget = Record<
   string,
   { count: number; voters: string[] }
 >
+
+type MemberPresence = "online" | "offline" | "away"
+
+type PresenceSnapshotPayload = {
+  users?: Array<{
+    userId: string
+    status: MemberPresence
+  }>
+}
+
+type PresenceUpdatePayload = {
+  userId: string
+  status: MemberPresence
+}
 
 type RoomMembersDialogProps = {
   roomId: string
@@ -34,6 +54,9 @@ export function RoomMembersDialog({
   const [votes, setVotes] = useState<VotesByTarget>({})
   const [loading, setLoading] = useState(false)
   const [votingId, setVotingId] = useState<string | null>(null)
+  const [presenceByUserId, setPresenceByUserId] = useState<Record<string, MemberPresence>>({})
+  const { connectionState } = useWebSocket({ autoConnect: false })
+  const { requestPresenceSnapshot } = useWebSocketSend()
 
   const fetchData = async () => {
     if (!roomId) return
@@ -45,9 +68,18 @@ export function RoomMembersDialog({
       ])
       if (membersRes.ok) {
         const data = await membersRes.json()
-        setMembers(data.members ?? [])
+        const nextMembers: Member[] = data.members ?? []
+        setMembers(nextMembers)
+        setPresenceByUserId((prev) => {
+          const next: Record<string, MemberPresence> = {}
+          for (const member of nextMembers) {
+            next[member.user_id] = prev[member.user_id] ?? "offline"
+          }
+          return next
+        })
       } else {
         setMembers([])
+        setPresenceByUserId({})
       }
       if (votesRes.ok) {
         const data = await votesRes.json()
@@ -59,14 +91,64 @@ export function RoomMembersDialog({
       toast.error("Failed to load room members")
       setMembers([])
       setVotes({})
+      setPresenceByUserId({})
     } finally {
       setLoading(false)
     }
   }
 
+  const mergedMembers = useMemo(() => {
+    const statusRank: Record<MemberPresence, number> = {
+      online: 0,
+      away: 1,
+      offline: 2,
+    }
+
+    return [...members]
+      .map((member) => ({
+        ...member,
+        presence: presenceByUserId[member.user_id] ?? "offline",
+      }))
+      .sort((left, right) => {
+        const statusDiff =
+          statusRank[left.presence] - statusRank[right.presence]
+        if (statusDiff !== 0) return statusDiff
+        return left.joined_at.localeCompare(right.joined_at)
+      })
+  }, [members, presenceByUserId])
+
   useEffect(() => {
     if (open && roomId) fetchData()
   }, [open, roomId])
+
+  useEffect(() => {
+    if (open && roomId && connectionState === "connected") {
+      requestPresenceSnapshot()
+    }
+  }, [open, roomId, connectionState, requestPresenceSnapshot])
+
+  useWebSocketMessage("presence_snapshot", (msg) => {
+    const payload = msg.payload as PresenceSnapshotPayload
+    if (!payload.users?.length) return
+
+    setPresenceByUserId((prev) => {
+      const next = { ...prev }
+      for (const user of payload.users ?? []) {
+        next[user.userId] = user.status
+      }
+      return next
+    })
+  })
+
+  useWebSocketMessage("presence_update", (msg) => {
+    const payload = msg.payload as PresenceUpdatePayload
+    if (!payload.userId) return
+
+    setPresenceByUserId((prev) => ({
+      ...prev,
+      [payload.userId]: payload.status,
+    }))
+  })
 
   const handleVoteRemove = async (targetUserId: string) => {
     setVotingId(targetUserId)
@@ -126,20 +208,40 @@ export function RoomMembersDialog({
             </p>
           ) : (
             <ul className="space-y-2 max-h-64 overflow-y-auto">
-              {members.map((m) => {
+              {mergedMembers.map((m) => {
                 const voteCount = votes[m.user_id]?.count ?? 0
                 const isVoting = votingId === m.user_id
                 return (
                   <li
                     key={m.user_id}
-                    className="flex items-center justify-between gap-2 rounded-xl bg-[#181822] border border-border/60 px-3 py-2"
+                    className="flex items-center justify-between gap-3 rounded-xl bg-[#181822] border border-border/60 px-3 py-2"
                   >
-                    <span className="text-sm font-mono truncate" title={m.user_id}>
-                      {displayId(m.user_id)}
-                      {m.is_current_user && (
-                        <span className="ml-2 text-[10px] text-primary">(you)</span>
-                      )}
-                    </span>
+                    <div className="min-w-0 flex items-center gap-2">
+                      <PresenceIndicator
+                        status={m.presence}
+                        showText
+                        className="shrink-0"
+                      />
+                      <div className="min-w-0">
+                        <WalletAddress
+                          address={m.wallet_address}
+                          fallback={m.display_name || displayId(m.user_id)}
+                          className="max-w-full"
+                          addressClassName="text-sm"
+                        />
+                        {m.display_name && (
+                          <p className="truncate text-[11px] text-muted-foreground">
+                            {m.display_name}
+                            {m.is_current_user && " • you"}
+                          </p>
+                        )}
+                        {!m.display_name && m.is_current_user && (
+                          <p className="truncate text-[11px] text-muted-foreground">
+                            you
+                          </p>
+                        )}
+                      </div>
+                    </div>
                     {!m.is_current_user && (
                       <button
                         type="button"
