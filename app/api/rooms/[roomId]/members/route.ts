@@ -8,6 +8,14 @@ type MemberRow = {
   joined_at: string
 }
 
+type ProfileRow = {
+  id: string
+  display_name: string | null
+  username: string | null
+  wallet_address: string | null
+  avatar_url: string | null
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ roomId: string }> }
@@ -35,20 +43,38 @@ export async function GET(
 
     if (error) throw error
 
-    const membersWithAliases = await Promise.all(
-      ((members ?? []) as MemberRow[]).map(async (m) => {
-        const alias = await getOrCreateUserAlias(roomId, m.user_id)
-        return {
-          user_id: m.user_id,
-          alias,
-          joined_at: m.joined_at,
-          is_current_user: m.user_id === user.id,
-        }
-      })
-    )
+    const memberIds = (members ?? []).map((member) => member.user_id)
+    let profiles: ProfileRow[] = []
+    let profilesError: unknown = null
+
+    if (memberIds.length) {
+      const profileResult = await supabase
+        .from("profiles")
+        .select("id, display_name, username, wallet_address, avatar_url")
+        .in("id", memberIds)
+
+      profiles = (profileResult.data ?? []) as ProfileRow[]
+      profilesError = profileResult.error
+    }
+
+    if (profilesError) {
+      console.warn("[rooms/members] profile lookup failed:", profilesError)
+    }
+
+    const profileById = new Map(profiles.map((profile) => [profile.id, profile] as const))
 
     return NextResponse.json({
-      members: membersWithAliases,
+      members: ((members ?? []) as MemberRow[]).map((m) => ({
+        user_id: m.user_id,
+        joined_at: m.joined_at,
+        is_current_user: m.user_id === user.id,
+        display_name:
+          profileById.get(m.user_id)?.display_name ??
+          profileById.get(m.user_id)?.username ??
+          null,
+        wallet_address: profileById.get(m.user_id)?.wallet_address ?? null,
+        avatar_url: profileById.get(m.user_id)?.avatar_url ?? null,
+      })),
     })
   } catch (error) {
     console.error("[rooms/members] GET error:", error)
