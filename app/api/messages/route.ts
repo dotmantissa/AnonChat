@@ -6,6 +6,7 @@ import {
   getWalletRateLimitKey,
   resolveWalletMessageRatePolicy,
 } from "@/lib/wallet-message-rate-limit"
+import { getRoomTTL } from "@/lib/ephemeral-cleanup"
 import { type NextRequest, NextResponse } from "next/server"
 
 export async function GET(request: NextRequest) {
@@ -120,7 +121,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { room_id, content } = body
+    const { room_id, content, is_ephemeral = false } = body
 
     if (!room_id || !content) {
       return NextResponse.json({ error: "room_id and content are required" }, { status: 400 })
@@ -183,15 +184,25 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    // Prepare message data
+    const messageData: any = {
+      user_id: user.id,
+      room_id,
+      content,
+      is_encrypted: false,
+      status: "sent",
+    }
+
+    // Handle ephemeral messages
+    if (is_ephemeral) {
+      const ttl = await getRoomTTL(room_id)
+      messageData.is_ephemeral = true
+      messageData.expires_at = new Date(Date.now() + ttl * 1000).toISOString()
+    }
+
     const { data, error } = await supabase
       .from("messages")
-      .insert({
-        user_id: user.id,
-        room_id,
-        content,
-        is_encrypted: false,
-        status: "sent",
-      })
+      .insert(messageData)
       .select()
 
     if (error) throw error
