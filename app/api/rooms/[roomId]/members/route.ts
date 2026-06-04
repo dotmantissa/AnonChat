@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
 import { recordGroupAuditEvent } from "@/lib/blockchain/audit"
+import { getOrCreateUserAlias } from "@/lib/groups/nicknameGenerator"
 
 type MemberRow = {
   user_id: string
