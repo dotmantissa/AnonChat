@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    logger.error("Error in cron job:", error);
+    logger.error("Error in cron job:", error as Record<string, unknown>);
 
     // Return 200 so cron doesn't retry, but log the error
     return NextResponse.json(

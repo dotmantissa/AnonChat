@@ -146,7 +146,7 @@ export async function cleanupExpiredMessages(): Promise<CleanupResult> {
       .limit(EPHEMERAL_CONFIG.BATCH_SIZE);
 
     if (fetchError) {
-      logger.error("Error fetching expired messages:", fetchError);
+      logger.error("Error fetching expired messages:", fetchError as unknown as Record<string, unknown>);
       throw fetchError;
     }
 
@@ -182,7 +182,10 @@ export async function cleanupExpiredMessages(): Promise<CleanupResult> {
           .in("id", messageIds);
 
         if (deleteError) {
-          logger.error(`Error deleting messages from room ${roomId}:`, deleteError);
+          logger.error(
+            `Error deleting messages from room ${roomId}:`,
+            deleteError as unknown as Record<string, unknown>
+          );
           result.errors.push({
             room_id: roomId,
             error: deleteError.message,
@@ -203,7 +206,7 @@ export async function cleanupExpiredMessages(): Promise<CleanupResult> {
           .insert(logs);
 
         if (logError) {
-          logger.warn(`Error creating cleanup logs for room ${roomId}:`, logError);
+          logger.warn(`Error creating cleanup logs for room ${roomId}:`, logError as unknown as Record<string, unknown>);
           // Don't fail the cleanup if logging fails
         }
 
@@ -215,7 +218,7 @@ export async function cleanupExpiredMessages(): Promise<CleanupResult> {
 
         logger.info(`Deleted ${messageIds.length} ephemeral messages from room ${roomId}`);
       } catch (error) {
-        logger.error(`Error processing room ${roomId}:`, error);
+        logger.error(`Error processing room ${roomId}:`, error as unknown as Record<string, unknown>);
         result.errors.push({
           room_id: roomId,
           error: error instanceof Error ? error.message : String(error),
@@ -228,7 +231,7 @@ export async function cleanupExpiredMessages(): Promise<CleanupResult> {
 
     logger.info("Ephemeral message cleanup job completed", { result });
   } catch (error) {
-    logger.error("Critical error in cleanup job:", error);
+    logger.error("Critical error in cleanup job:", error as unknown as Record<string, unknown>);
     result.errors.push({
       room_id: "global",
       error: error instanceof Error ? error.message : String(error),
@@ -256,13 +259,13 @@ export async function cleanupOldLogs(): Promise<void> {
       .lt("deleted_at", retentionDate.toISOString());
 
     if (error) {
-      logger.warn("Error cleaning up old logs:", error);
+      logger.warn("Error cleaning up old logs:", error as unknown as Record<string, unknown>);
       return;
     }
 
     logger.info("Cleaned up old ephemeral message cleanup logs");
   } catch (error) {
-    logger.warn("Error in cleanupOldLogs:", error);
+    logger.warn("Error in cleanupOldLogs:", error as unknown as Record<string, unknown>);
   }
 }
 
@@ -287,7 +290,7 @@ export async function invalidateRoomMessageCache(roomId: string): Promise<void> 
     for (const key of cacheKeys) {
       if (key.includes("*")) {
         // Pattern delete
-        const cursor = await redisClient.scan(0, "MATCH", key);
+        await redisClient.scan(0, { MATCH: key });
         // Note: Redis scan might need additional iteration for large datasets
         // For now, we'll use a simpler approach
       } else {
@@ -297,7 +300,7 @@ export async function invalidateRoomMessageCache(roomId: string): Promise<void> 
 
     logger.debug(`Invalidated cache for room ${roomId}`);
   } catch (error) {
-    logger.warn(`Error invalidating cache for room ${roomId}:`, error);
+    logger.warn(`Error invalidating cache for room ${roomId}:`, error as unknown as Record<string, unknown>);
     // Don't throw - cache invalidation is best effort
   }
 }
@@ -323,13 +326,13 @@ export async function getCleanupLogs(params: {
       .range(params.offset ?? 0, (params.offset ?? 0) + (params.limit ?? 100) - 1);
 
     if (error) {
-      logger.error("Error fetching cleanup logs:", error);
+      logger.error("Error fetching cleanup logs:", error as unknown as Record<string, unknown>);
       throw error;
     }
 
     return data || [];
   } catch (error) {
-    logger.error("Error in getCleanupLogs:", error);
+    logger.error("Error in getCleanupLogs:", error as unknown as Record<string, unknown>);
     throw error;
   }
 }
@@ -383,7 +386,7 @@ export async function getCleanupStats(): Promise<{
       deletedThisMonth: deletedMonthCount ?? 0,
     };
   } catch (error) {
-    logger.error("Error fetching cleanup stats:", error);
+    logger.error("Error fetching cleanup stats:", error as unknown as Record<string, unknown>);
     return {
       totalEphemeralMessages: 0,
       expiredMessages: 0,

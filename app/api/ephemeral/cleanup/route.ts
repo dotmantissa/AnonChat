@@ -72,7 +72,10 @@ export async function GET(request: NextRequest) {
     const stats = await getCleanupStats();
     return NextResponse.json({ stats });
   } catch (error) {
-    logger.error("Error in GET /api/ephemeral/cleanup:", error);
+    logger.error(
+      "Error in GET /api/ephemeral/cleanup:",
+      error as Record<string, unknown>
+    );
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

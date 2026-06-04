@@ -61,7 +61,10 @@ export async function GET(request: NextRequest) {
         .maybeSingle();
 
       if (roomError) {
-        logger.error("Error fetching room config:", roomError);
+        logger.error(
+          "Error fetching room config:",
+          roomError as unknown as Record<string, unknown>
+        );
       }
 
       result.room = roomConfig || null;
@@ -76,7 +79,10 @@ export async function GET(request: NextRequest) {
         .maybeSingle();
 
       if (globalError) {
-        logger.error("Error fetching global config:", globalError);
+        logger.error(
+          "Error fetching global config:",
+          globalError as unknown as Record<string, unknown>
+        );
       }
 
       result.global = globalConfig || {
@@ -92,7 +98,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(result);
   } catch (error) {
-    logger.error("Error in GET /api/ephemeral/config:", error);
+    logger.error("Error in GET /api/ephemeral/config:", error as unknown as Record<string, unknown>);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -149,7 +155,10 @@ export async function POST(request: NextRequest) {
         .single();
 
       if (error) {
-        logger.error("Error updating global config:", error);
+        logger.error(
+          "Error updating global config:",
+          error as unknown as Record<string, unknown>
+        );
         throw error;
       }
 
@@ -197,14 +206,20 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) {
-      logger.error("Error updating room config:", error);
+      logger.error(
+        "Error updating room config:",
+        error as unknown as Record<string, unknown>
+      );
       throw error;
     }
 
     logger.info(`Room ephemeral config updated:`, { room_id, ttl_seconds });
     return NextResponse.json(data);
   } catch (error) {
-    logger.error("Error in POST /api/ephemeral/config:", error);
+    logger.error(
+      "Error in POST /api/ephemeral/config:",
+      error as unknown as Record<string, unknown>
+    );
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
