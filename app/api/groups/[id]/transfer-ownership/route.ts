@@ -36,6 +36,7 @@ import {
   generateCorrelationId,
 } from "@/lib/blockchain/logger"
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { notifyOwnershipTransferred } from "@/lib/notifications/service"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -380,6 +381,30 @@ export async function POST(
       `[transfer-ownership] Group ${groupId} ownership transferred from user ${user.id} to user ${newOwnerId}`
     )
 
+    const [newOwnerNotification, previousOwnerNotification] = await Promise.all([
+      notifyOwnershipTransferred(supabase, {
+        userId: newOwnerId,
+        groupId,
+        groupName: group.name,
+        role: "new_owner",
+      }),
+      notifyOwnershipTransferred(supabase, {
+        userId: user.id,
+        groupId,
+        groupName: group.name,
+        role: "previous_owner",
+        counterpartyWallet: newOwnerWalletAddress,
+      }),
+    ])
+
+    for (const result of [newOwnerNotification, previousOwnerNotification]) {
+      if (!result.delivered && result.deliveryError) {
+        console.warn(
+          `[transfer-ownership] Notification stored but realtime delivery failed: ${result.deliveryError}`,
+        )
+      }
+    }
+
     return NextResponse.json(
       {
         success: true,
@@ -391,6 +416,10 @@ export async function POST(
           submitted: stellarTxHash !== null,
           transactionHash: stellarTxHash ?? undefined,
           explorerUrl: explorerUrl ?? undefined,
+        },
+        notifications: {
+          new_owner: newOwnerNotification.notification ?? undefined,
+          previous_owner: previousOwnerNotification.notification ?? undefined,
         },
       },
       { status: 200 }
