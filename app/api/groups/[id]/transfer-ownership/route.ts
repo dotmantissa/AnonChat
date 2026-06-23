@@ -36,6 +36,7 @@ import {
   generateCorrelationId,
 } from "@/lib/blockchain/logger"
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { requireGroupOwner } from "@/lib/middleware/group-ownership"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -166,32 +167,15 @@ export async function POST(
     }
 
     // ── 6. Verify the group exists and the caller is the current owner ────────
-    const { data: group, error: groupError } = await supabase
-      .from("rooms")
-      .select("id, name, created_by, is_private")
-      .eq("id", groupId)
-      .maybeSingle()
+    const ownerCheck = await requireGroupOwner({
+      supabase,
+      groupId,
+      callerWallet,
+      userId: user.id,
+    })
 
-    if (groupError) {
-      console.error("[transfer-ownership] group lookup error:", groupError)
-      return NextResponse.json(
-        { error: "Failed to retrieve group" },
-        { status: 500 }
-      )
-    }
-
-    if (!group) {
-      return NextResponse.json({ error: "Group not found" }, { status: 404 })
-    }
-
-    if (group.created_by !== user.id) {
-      console.warn(
-        `[transfer-ownership] user ${user.id} attempted transfer on group ${groupId} they do not own`
-      )
-      return NextResponse.json(
-        { error: "Forbidden. Only the current group owner can transfer ownership." },
-        { status: 403 }
-      )
+    if (ownerCheck instanceof NextResponse) {
+      return ownerCheck
     }
 
     // ── 7. Resolve the new owner's user ID from their wallet address ──────────
