@@ -14,6 +14,8 @@
     "lint": "eslint . --ext .ts,.tsx,.js,.jsx",
     "test:unit": "vitest run",
     "test": "node scripts/verify-websocket.js",
+    "test:wallet-auth": "node --test scripts/test-wallet-authorization.mjs",
+    "test:sensitive-actions": "node scripts/test-sensitive-actions-api.mjs",
     "test:vote-remove": "node scripts/test-vote-remove-api.mjs",
     "test:ephemeral": "node scripts/test-ephemeral-cleanup.mjs",
     "start": "next start",

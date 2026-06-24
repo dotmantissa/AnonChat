@@ -5,8 +5,9 @@
  *
  * Request body:
  *   {
- *     newOwnerWalletAddress: string   // Stellar public key of the new owner
+ *     walletAddress: string           // Caller's Stellar public key
  *     signature: string               // Hex-encoded Ed25519 signature of the nonce
+ *     newOwnerWalletAddress: string   // Stellar public key of the new owner
  *   }
  *
  * Flow:
@@ -23,8 +24,13 @@
 
 import { createClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
-import { consumeNonce, verifyWalletSignature } from "@/lib/auth/stellar-verify"
 import { validateWalletAddressWithMessage } from "@/lib/auth/validation"
+import {
+  ensureWalletMatchesUser,
+  resolveWalletFromUser,
+  verifyWalletAuthorization,
+} from "@/lib/auth/wallet-authorization"
+import { auditLog } from "@/lib/auth/signed-message-middleware"
 import { insertRoomActivity } from "@/lib/activity/room-activity"
 import {
   submitMetadataHash,
@@ -42,6 +48,7 @@ import { notifyOwnershipTransferred } from "@/lib/notifications/service"
 
 type TransferOwnershipBody = {
   newOwnerWalletAddress?: string
+  walletAddress?: string
   signature?: string
 }
 
@@ -89,11 +96,11 @@ export async function POST(
     // ── 2. Parse and validate request body ───────────────────────────────────
     const body: TransferOwnershipBody = await request.json().catch(() => ({}))
 
-    const { newOwnerWalletAddress, signature } = body
+    const { newOwnerWalletAddress, walletAddress, signature } = body
 
-    if (!newOwnerWalletAddress || !signature) {
+    if (!newOwnerWalletAddress) {
       return NextResponse.json(
-        { error: "newOwnerWalletAddress and signature are required" },
+        { error: "newOwnerWalletAddress is required" },
         { status: 400 }
       )
     }
@@ -103,14 +110,15 @@ export async function POST(
       return NextResponse.json({ error: walletError }, { status: 400 })
     }
 
-    if (typeof signature !== "string" || signature.trim() === "") {
-      return NextResponse.json(
-        { error: "signature is required" },
-        { status: 400 }
-      )
+    // ── 3. Verify wallet authorization (nonce + signature) ──────────────────
+    const auth = await verifyWalletAuthorization(
+      { walletAddress, signature },
+      "transfer_ownership",
+    )
+    if (!auth.ok) {
+      return auth.response
     }
 
-    // ── 3. Resolve the caller's wallet address from their profile ─────────────
     const { data: callerProfile, error: profileError } = await supabase
       .from("profiles")
       .select("id, wallet_address")
@@ -125,48 +133,15 @@ export async function POST(
       )
     }
 
-    const callerWallet: string | null =
-      callerProfile?.wallet_address ??
-      // Fallback: wallet address is encoded in the deterministic email
-      (user.email?.endsWith("@wallet.anonchat.local")
-        ? user.email.replace("@wallet.anonchat.local", "")
-        : null)
-
-    if (!callerWallet) {
-      return NextResponse.json(
-        { error: "Could not determine caller wallet address" },
-        { status: 400 }
-      )
+    const callerWallet = resolveWalletFromUser(user, callerProfile)
+    const walletMismatch = ensureWalletMatchesUser(auth.walletAddress, callerWallet)
+    if (walletMismatch) {
+      return walletMismatch
     }
 
-    // ── 4. Consume the one-time nonce (prevents replay attacks) ──────────────
-    const nonce = await consumeNonce(callerWallet)
-    if (!nonce) {
-      console.warn(
-        `[transfer-ownership] nonce missing or expired for wallet: ${callerWallet.substring(0, 8)}...`
-      )
-      return NextResponse.json(
-        { error: "Nonce not found or expired. Request a new nonce first." },
-        { status: 401 }
-      )
-    }
+    const nonce = auth.nonce
 
-    // ── 5. Verify the Ed25519 signature ───────────────────────────────────────
-    const isValid = verifyWalletSignature(callerWallet, nonce, signature)
-    if (!isValid) {
-      console.warn(
-        `[transfer-ownership] signature verification failed for wallet: ${callerWallet.substring(0, 8)}...`
-      )
-      return NextResponse.json(
-        {
-          error:
-            "Signature verification failed. Wallet ownership could not be proved.",
-        },
-        { status: 401 }
-      )
-    }
-
-    // ── 6. Verify the group exists and the caller is the current owner ────────
+    // ── 4. Verify the group exists and the caller is the current owner ────────
     const { data: group, error: groupError } = await supabase
       .from("rooms")
       .select("id, name, created_by, is_private")
@@ -376,6 +351,12 @@ export async function POST(
         activityErr
       )
     }
+
+    auditLog("transfer_ownership", auth.walletAddress, {
+      groupId,
+      newOwnerWalletAddress,
+      transferLogId: result?.transfer_log_id ?? null,
+    })
 
     console.info(
       `[transfer-ownership] Group ${groupId} ownership transferred from user ${user.id} to user ${newOwnerId}`
