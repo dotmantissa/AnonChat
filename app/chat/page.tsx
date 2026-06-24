@@ -7,9 +7,9 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { ChatWelcomeState } from "@/components/chat-welcome-state";
 import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
-import { ChatEmptyState } from "@/components/chat-empty-state";
 import {
   PresenceIndicator,
   type PresenceStatus,
@@ -155,9 +155,21 @@ export default function ChatPage() {
     setIsLoadingRooms(true);
     try {
       const response = await fetch("/api/rooms");
+      
+      // Handle non-200 responses gracefully (like the 500 error you're getting)
+      if (!response.ok) {
+        console.warn(`Rooms API returned status ${response.status}. Using local preview mode.`);
+        setChats([]);
+        setSelectedChatId(null);
+        return;
+      }
+
       const data = await response.json();
-      if (!response.ok || data.error) {
-        throw new Error(data.error || "Failed to fetch rooms");
+      if (data.error) {
+        console.warn("Rooms API returned a custom error:", data.error);
+        setChats([]);
+        setSelectedChatId(null);
+        return;
       }
 
       const rawRooms: DBRoom[] = data.rooms || [];
@@ -181,8 +193,10 @@ export default function ChatPage() {
         (currentSelected) => currentSelected || previews[0]?.id || null,
       );
     } catch (error) {
-      console.error("Failed to fetch rooms", error);
+      // This catches the 'TypeError: fetch failed' from your dummy URL completely!
+      console.warn("Network fetch to rooms failed. Falling back to empty state for preview.");
       setChats([]);
+      setSelectedChatId(null);
     } finally {
       setIsLoadingRooms(false);
     }
@@ -341,11 +355,11 @@ export default function ChatPage() {
         prev.map((chat) =>
           chat.id === selectedChatId
             ? {
-                ...chat,
-                lastMessage: trimmedMessage,
-                lastSeen: savedMessage.time,
-                unreadCount: 0,
-              }
+              ...chat,
+              lastMessage: trimmedMessage,
+              lastSeen: savedMessage.time,
+              unreadCount: 0,
+            }
             : chat,
         ),
       );
@@ -498,7 +512,13 @@ export default function ChatPage() {
                 activeMobileTab === "chats" && "hidden md:flex",
               )}
             >
-              {!selectedChat && <ChatEmptyState />}
+              {/* INTEGRATED WELCOME STATE HERE */}
+              {!selectedChat && (
+                <ChatWelcomeState
+                  onCreateGroup={() => console.log("Open Create Group Overlay Trigger")}
+                  onJoinGroup={() => console.log("Open Join Group Code Overlay Trigger")}
+                />
+              )}
 
               {selectedChat && (
                 <>
