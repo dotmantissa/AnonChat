@@ -10,6 +10,7 @@ export type WebSocketServerEventType =
   | "wallet_disconnect"
   | "presence_update"
   | "presence_snapshot"
+  | "notification"
   | "error"
   | "connection_established"
 
