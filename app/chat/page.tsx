@@ -21,6 +21,7 @@ import ConnectWallet from "@/components/wallet-connector";
 import { RoomActivityPanel } from "@/components/room-activity-panel";
 import { MessageSearchBar } from "@/components/message-search-bar";
 import { GroupVerificationBadge } from "@/components/GroupVerificationBadge";
+import { ChatMessageBubble, type ChatMessage } from "@/components/chat-message-bubble";
 import { cn } from "@/lib/utils";
 import { highlightText } from "@/lib/highlight-text";
 import { handleAppError } from "@/lib/error-handler"; // Integrated Error Handler
@@ -48,13 +49,7 @@ type ChatPreview = {
   status: PresenceStatus;
 };
 
-type ChatMessage = {
-  id: string;
-  author: "me" | "them";
-  text: string;
-  time: string;
-  status: "sending" | "sent" | "delivered" | "read";
-};
+
 
 interface DBRoom {
   id: string;
@@ -749,34 +744,11 @@ export default function ChatPage() {
 
                      {!isLoadingMessagesByRoom[selectedChatId || ''] &&
                        filteredMessages.map((message) => (
-                         <div
-                           key={message.id}
-                           className={cn(
-                             "max-w-[85%] sm:max-w-[72%] rounded-2xl px-4 py-2.5 shadow-sm text-sm",
-                             message.author === "me"
-                               ? "ml-auto bg-primary text-primary-foreground rounded-br-sm"
-                               : "mr-auto bg-card border border-border/70 rounded-bl-sm",
-                           )}
-                         >
-                           <p className="whitespace-pre-wrap break-words leading-relaxed">
-                             {highlightText(message.text, messageSearchQuery)}
-                           </p>
-                           <div
-                             className={cn(
-                               "mt-1 flex items-center justify-end gap-1 text-[10px]",
-                               message.author === "me"
-                                 ? "text-primary-foreground/80"
-                                 : "text-muted-foreground",
-                             )}
-                           >
-                             <span>{message.time}</span>
-                             {message.author === "me" && (
-                               <span>
-                                 {message.status === "sending" ? "..." : "✓✓"}
-                               </span>
-                             )}
-                           </div>
-                         </div>
+                         <ChatMessageBubble 
+                           key={message.id} 
+                           message={message} 
+                           searchQuery={messageSearchQuery} 
+                         />
                        ))}
                    </div>
 
