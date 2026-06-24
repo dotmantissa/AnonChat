@@ -412,6 +412,37 @@ export function createWebSocketServer(port: number = 3001) {
             break
           }
 
+          case "edit_message": {
+            const editRoomId = message.payload.roomId
+            const editMessageId = message.payload.messageId
+            const editContent = message.payload.content
+            const editAuthorId = connection.userId
+
+            if (!editRoomId || !editMessageId || !editContent || !editAuthorId) {
+              ws.send(
+                JSON.stringify({
+                  type: "error",
+                  payload: { message: "Invalid edit request" },
+                  timestamp: Date.now(),
+                }),
+              )
+              break
+            }
+
+            broadcastToRoom(editRoomId, {
+              type: "message_edit",
+              payload: {
+                messageId: editMessageId,
+                userId: editAuthorId,
+                roomId: editRoomId,
+                content: editContent,
+                editedAt: Date.now(),
+              },
+              timestamp: Date.now(),
+            })
+            break
+          }
+
           case "typing": {
             const typingRoomId = message.payload.roomId
 

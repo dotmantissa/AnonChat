@@ -266,6 +266,13 @@ export class WebSocketClient {
       payload: { messageId, roomId },
       timestamp: Date.now(),
     });
+
+  editMessage = (messageId: string, roomId: string, content: string) =>
+    this.send({
+      type: "edit_message",
+      payload: { messageId, roomId, content },
+      timestamp: Date.now(),
+    });
 }
 
 let instance: WebSocketClient | null = null;
