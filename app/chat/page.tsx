@@ -19,6 +19,7 @@ import { RoomMembersDialog } from "@/components/room-members-dialog";
 import ConnectWallet from "@/components/wallet-connector";
 import { RoomActivityPanel } from "@/components/room-activity-panel";
 import { MessageSearchBar } from "@/components/message-search-bar";
+import { InviteMembersModal } from "@/components/invite-members-modal";
 import { cn } from "@/lib/utils";
 import { highlightText } from "@/lib/highlight-text";
 import { handleAppError } from "@/lib/error-handler"; // Integrated Error Handler
@@ -653,6 +654,10 @@ export default function ChatPage() {
                           <Users className="h-3.5 w-3.5" />
                           Members
                         </button>
+                        <InviteMembersModal
+                          roomId={selectedChat.id}
+                          roomName={selectedChat.name}
+                        />
                       </div>
                     </div>
                   </header>
