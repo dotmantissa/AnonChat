@@ -19,6 +19,7 @@ import { RoomMembersDialog } from "@/components/room-members-dialog";
 import ConnectWallet from "@/components/wallet-connector";
 import { RoomActivityPanel } from "@/components/room-activity-panel";
 import { MessageSearchBar } from "@/components/message-search-bar";
+import { GroupVerificationBadge } from "@/components/GroupVerificationBadge";
 import { cn } from "@/lib/utils";
 import { highlightText } from "@/lib/highlight-text";
 import { handleAppError } from "@/lib/error-handler"; // Integrated Error Handler
@@ -562,6 +563,10 @@ export default function ChatPage() {
                                   >
                                     {chat.name}
                                   </p>
+                                  <GroupVerificationBadge
+                                    groupId={chat.id}
+                                    showLabel={false}
+                                  />
                                 </div>
                                 <div className="shrink-0 flex flex-col items-end gap-1">
                                   <p className="text-[11px] text-muted-foreground whitespace-nowrap">
@@ -624,9 +629,12 @@ export default function ChatPage() {
                         </button>
 
                         <div className="min-w-0">
-                          <p className="font-semibold truncate">
-                            {selectedChat.name}
-                          </p>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <p className="font-semibold truncate">
+                              {selectedChat.name}
+                            </p>
+                            <GroupVerificationBadge groupId={selectedChat.id} />
+                          </div>
                           <p className="text-xs text-muted-foreground truncate">
                             {memberCountByRoom[selectedChat.id] !== undefined
                               ? `${memberCountByRoom[selectedChat.id]} members`
