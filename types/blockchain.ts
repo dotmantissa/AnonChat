@@ -45,6 +45,27 @@ export interface VerificationResponse {
   memoGroupId?: string | null;
   /** Whether the on-chain memo matches the expected group memo. */
   memoVerified?: boolean;
+  /** Whether the creator wallet is bound to the anchored metadata hash. */
+  walletOwnershipVerified?: boolean;
+  /** Owner wallet address at verification time. */
+  ownerWallet?: string | null;
+  /** Human-readable error when verification failed. */
+  error?: string | null;
+}
+
+export interface GroupVerificationRecord {
+  id?: string;
+  group_id: string;
+  wallet_address: string;
+  tx_hash: string | null;
+  verified: boolean;
+  memo_verified: boolean;
+  wallet_ownership_verified: boolean;
+  metadata_hash: string | null;
+  verification_error: string | null;
+  verified_at: string | null;
+  last_checked_at: string;
+  created_at?: string;
 }
 
 export interface GroupCreationResponse {

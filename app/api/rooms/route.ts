@@ -11,6 +11,11 @@ import {
   generateCorrelationId,
 } from "@/lib/blockchain/logger";
 import { recordGroupAuditEvent } from "@/lib/blockchain/audit";
+import {
+  evaluateGroupVerification,
+  toVerificationRecord,
+} from "@/lib/blockchain/group-verification";
+import { getTransaction } from "@/lib/blockchain/stellar-service";
 import { insertRoomActivity } from "@/lib/activity/room-activity";
 import { type SupabaseClient } from "@supabase/supabase-js";
 
@@ -236,6 +241,38 @@ export async function POST(request: NextRequest) {
           },
           correlationId,
         );
+
+        const transaction = await getTransaction(stellarTxHash);
+        const verification = evaluateGroupVerification(
+          {
+            ...room,
+            stellar_tx_hash: stellarTxHash,
+            metadata_hash: metadataHash,
+            memo_group_id: result.memoGroupId ?? null,
+          },
+          transaction,
+        );
+
+        const { error: verificationError } = await supabase
+          .from("group_verifications")
+          .upsert(toVerificationRecord(room.id, verification), {
+            onConflict: "group_id",
+          });
+
+        if (verificationError) {
+          logBlockchainOperation(
+            "warn",
+            "Failed to persist group_verifications record after creation",
+            {
+              groupId: room.id,
+              error: {
+                type: "DatabaseError",
+                message: verificationError.message,
+              },
+            },
+            correlationId,
+          );
+        }
       } else {
         logBlockchainOperation(
           "warn",

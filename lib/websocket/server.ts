@@ -77,6 +77,57 @@ export function createWebSocketServer(port: number = 3001) {
     })
   }
 
+  function setupNotificationBridge(httpServer: http.Server) {
+    httpServer.on("request", (req, res) => {
+      if (req.method !== "POST" || req.url !== "/notify") {
+        res.writeHead(404, { "Content-Type": "application/json" })
+        res.end(JSON.stringify({ error: "Not found" }))
+        return
+      }
+
+      const secret = process.env.WS_NOTIFY_SECRET || "dev-notify-secret"
+      const authHeader = req.headers.authorization
+      if (authHeader !== `Bearer ${secret}`) {
+        res.writeHead(401, { "Content-Type": "application/json" })
+        res.end(JSON.stringify({ error: "Unauthorized" }))
+        return
+      }
+
+      let body = ""
+      req.on("data", (chunk) => {
+        body += chunk
+      })
+
+      req.on("end", () => {
+        try {
+          const parsed = JSON.parse(body) as {
+            userId?: string
+            notification?: Record<string, unknown>
+          }
+
+          if (!parsed.userId || !parsed.notification) {
+            res.writeHead(400, { "Content-Type": "application/json" })
+            res.end(JSON.stringify({ error: "userId and notification are required" }))
+            return
+          }
+
+          sendToUser(parsed.userId, {
+            type: "notification",
+            payload: parsed.notification,
+            timestamp: Date.now(),
+          })
+
+          res.writeHead(200, { "Content-Type": "application/json" })
+          res.end(JSON.stringify({ delivered: true }))
+        } catch (error) {
+          console.error("[WebSocket] Notification bridge error:", error)
+          res.writeHead(400, { "Content-Type": "application/json" })
+          res.end(JSON.stringify({ error: "Invalid request body" }))
+        }
+      })
+    })
+  }
+
   function getPresenceSnapshot() {
     return Array.from(userPresence.values()).map((presence) => ({
       userId: presence.userId,
@@ -443,6 +494,8 @@ export function createWebSocketServer(port: number = 3001) {
       cleanupClient(clientId)
     })
   })
+
+  setupNotificationBridge(server)
 
   server.listen(port, () => {
     console.log(`[WebSocket Server] Running on ws://localhost:${port}`)
