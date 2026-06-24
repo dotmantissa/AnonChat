@@ -9,6 +9,7 @@ export type WebSocketServerEventType =
   | "wallet_connect"
   | "wallet_disconnect"
   | "presence_update"
+  | "presence_snapshot"
   | "error"
   | "connection_established"
 
@@ -22,6 +23,7 @@ export type WebSocketClientEventType =
   | "typing"
   | "stop_typing"
   | "wallet_event"
+  | "request_presence_snapshot"
   | "pong"
 
 // All event types
@@ -36,6 +38,7 @@ export interface WebSocketMessage {
 export interface UserPresence {
   userId: string
   displayName: string
+  walletAddress?: string
   status: "online" | "offline" | "away"
   lastSeen: number
 }

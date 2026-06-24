@@ -11,6 +11,8 @@ Included migrations (apply in numeric order):
 - `005_add_last_read_to_room_members.sql` (new)
 - `006_unread_view.sql`          (new)
 - `007_create_group_membership.sql`  (new)
+- `011_enhance_invites_for_group_join.sql` (new)
+- `012_group_audit_events.sql` (new)
 
 ## How to apply (psql)
 
@@ -28,6 +30,8 @@ psql "$DATABASE_URL" -f scripts/004_create_room_members.sql
 psql "$DATABASE_URL" -f scripts/005_add_last_read_to_room_members.sql
 psql "$DATABASE_URL" -f scripts/006_unread_view.sql
 psql "$DATABASE_URL" -f scripts/007_create_group_membership.sql
+psql "$DATABASE_URL" -f scripts/011_enhance_invites_for_group_join.sql
+psql "$DATABASE_URL" -f scripts/012_group_audit_events.sql
 ```
 
 ## How to apply (Supabase)
@@ -40,6 +44,8 @@ If the project uses Supabase, maintainers can run the same `psql` commands again
 - `scripts/005_add_last_read_to_room_members.sql` adds `last_read_at` used by the unread-count view.
 - `scripts/006_unread_view.sql` creates `public.user_room_unreads` view and grants `SELECT` to `public` for convenience; adjust privileges as needed.
 - `scripts/007_create_group_membership.sql` creates `public.group_membership` table for wallet-based group membership tracking.
+- `scripts/011_enhance_invites_for_group_join.sql` adds `max_uses` and `use_count` columns to `public.invites`, adds RLS policies for authenticated read/update, and creates the `increment_invite_use_count` SQL function for atomic usage tracking.
+- `scripts/012_group_audit_events.sql` creates `public.group_audit_events`, which maps group audit events to Stellar transaction hashes and exposes the audit trail to authenticated users who can access the group.
 - A development-only endpoint (`/api/rooms/seed-test`) was added that seeds a room for an authenticated user. It requires a valid Supabase session; do not enable any service-role or unauthenticated behavior in production without review.
 
 ## Including migrations in PRs

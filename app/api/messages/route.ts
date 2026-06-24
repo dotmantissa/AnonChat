@@ -1,10 +1,12 @@
 import { createClient } from "@/lib/supabase/server"
+import { recordGroupAuditEvent } from "@/lib/blockchain/audit"
 import {
   checkAndConsumeWalletMessageSlot,
   formatRateLimitWindow,
   getWalletRateLimitKey,
   resolveWalletMessageRatePolicy,
 } from "@/lib/wallet-message-rate-limit"
+import { getRoomTTL } from "@/lib/ephemeral-cleanup"
 import { type NextRequest, NextResponse } from "next/server"
 
 export async function GET(request: NextRequest) {
@@ -119,7 +121,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { room_id, content } = body
+    const { room_id, content, is_ephemeral = false } = body
 
     if (!room_id || !content) {
       return NextResponse.json({ error: "room_id and content are required" }, { status: 400 })
@@ -159,22 +161,48 @@ export async function POST(request: NextRequest) {
     }
 
     if (!membership) {
-      const { error: insertMemberErr } = await supabase.from("room_members").insert({
-        room_id,
-        user_id: user.id,
-      })
+      const { data: insertedMembership, error: insertMemberErr } = await supabase
+        .from("room_members")
+        .insert({
+          room_id,
+          user_id: user.id,
+        })
+        .select("id")
+        .single()
       if (insertMemberErr) throw insertMemberErr
+
+      await recordGroupAuditEvent({
+        supabase,
+        groupId: room_id,
+        eventType: "member_joined",
+        actorUserId: user.id,
+        targetUserId: user.id,
+        metadata: {
+          membership_id: insertedMembership?.id ?? null,
+          source: "message_send_auto_join",
+        },
+      })
+    }
+
+    // Prepare message data
+    const messageData: any = {
+      user_id: user.id,
+      room_id,
+      content,
+      is_encrypted: false,
+      status: "sent",
+    }
+
+    // Handle ephemeral messages
+    if (is_ephemeral) {
+      const ttl = await getRoomTTL(room_id)
+      messageData.is_ephemeral = true
+      messageData.expires_at = new Date(Date.now() + ttl * 1000).toISOString()
     }
 
     const { data, error } = await supabase
       .from("messages")
-      .insert({
-        user_id: user.id,
-        room_id,
-        content,
-        is_encrypted: false,
-        status: "sent",
-      })
+      .insert(messageData)
       .select()
 
     if (error) throw error

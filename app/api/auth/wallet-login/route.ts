@@ -3,6 +3,7 @@ import { consumeNonce, verifyWalletSignature } from "@/lib/auth/stellar-verify";
 import { createClient } from "@/lib/supabase/server";
 import { deterministicPassword } from "@/lib/auth/password";
 import { validateWalletAddressWithMessage } from "@/lib/auth/validation";
+import { buildWalletAuthResponse } from "@/lib/auth/wallet-token-response";
 
 /**
  * POST /api/auth/wallet-login
@@ -39,9 +40,9 @@ export async function POST(request: NextRequest) {
     }
 
     // ── 2. Consume the nonce (one-time use, expires after 5 min) ────────────
-    const nonce = consumeNonce(walletAddress);
+    const nonce = await consumeNonce(walletAddress);
     if (!nonce) {
-      console.warn(`[wallet-auth] /api/auth/wallet-login nonce not found or expired for wallet: ${walletAddress.substring(0, 8)}...`);
+      console.warn(`[wallet-auth] /api/auth/wallet-login nonce rejection: missing or expired for wallet: ${walletAddress.substring(0, 8)}...`);
       return NextResponse.json(
         { error: "Nonce not found or expired. Request a new nonce." },
         { status: 401 },
@@ -74,14 +75,15 @@ export async function POST(request: NextRequest) {
 
     if (!signInError && signInData.session) {
       console.log(`[wallet-auth] /api/auth/wallet-login successful sign-in for wallet: ${walletAddress.substring(0, 8)}...`);
-      return NextResponse.json(
+      return buildWalletAuthResponse(
+        walletAddress,
         {
           session: signInData.session,
           user: signInData.user,
           walletAddress,
           isNewUser: false,
         },
-        { status: 200 },
+        200,
       );
     }
 
@@ -111,14 +113,15 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`[wallet-auth] /api/auth/wallet-login successful sign-up for wallet: ${walletAddress.substring(0, 8)}...`);
-    return NextResponse.json(
+    return buildWalletAuthResponse(
+      walletAddress,
       {
         session: signUpData.session,
         user: signUpData.user,
         walletAddress,
         isNewUser: true,
       },
-      { status: 201 },
+      201,
     );
   } catch (err: any) {
     console.error("[wallet-auth] /api/auth/wallet-login error:", err);

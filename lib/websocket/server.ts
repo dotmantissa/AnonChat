@@ -22,13 +22,24 @@ interface Room {
   users: Set<string>
 }
 
+interface PresenceRecord {
+  userId: string
+  displayName: string
+  walletAddress?: string
+  avatarUrl?: string
+  status: "online" | "offline" | "away"
+  lastSeen: number
+}
+
 // In-memory storage
 const clients = new Map<string, ClientConnection>()
 const rooms = new Map<string, Room>()
-const userPresence = new Map<string, User>()
+const userPresence = new Map<string, PresenceRecord>()
+const userConnections = new Map<string, Set<string>>()
+const presenceTimeouts = new Map<string, NodeJS.Timeout>()
 
 const HEARTBEAT_INTERVAL = 30000 // 30 seconds
-const RECONNECT_TIMEOUT = 60000 // 60 seconds
+const PRESENCE_GRACE_PERIOD = 5000 // 5 seconds
 
 export function createWebSocketServer(port: number = 3001) {
   const server = http.createServer()
@@ -66,6 +77,80 @@ export function createWebSocketServer(port: number = 3001) {
     })
   }
 
+  function getPresenceSnapshot() {
+    return Array.from(userPresence.values()).map((presence) => ({
+      userId: presence.userId,
+      displayName: presence.displayName,
+      walletAddress: presence.walletAddress,
+      status: presence.status,
+      lastSeen: presence.lastSeen,
+    }))
+  }
+
+  function sendPresenceSnapshot(ws: WebSocket) {
+    ws.send(
+      JSON.stringify({
+        type: "presence_snapshot",
+        payload: {
+          users: getPresenceSnapshot(),
+        },
+        timestamp: Date.now(),
+      }),
+    )
+  }
+
+  function clearPendingPresenceTimeout(userId: string) {
+    const timeout = presenceTimeouts.get(userId)
+    if (timeout) {
+      clearTimeout(timeout)
+      presenceTimeouts.delete(userId)
+    }
+  }
+
+  function broadcastPresenceUpdate(presence: PresenceRecord) {
+    broadcastToAll({
+      type: "presence_update",
+      payload: {
+        userId: presence.userId,
+        displayName: presence.displayName,
+        walletAddress: presence.walletAddress,
+        status: presence.status,
+        lastSeen: presence.lastSeen,
+      },
+      timestamp: Date.now(),
+    })
+  }
+
+  function registerUserConnection(clientId: string, user: User) {
+    const connections = userConnections.get(user.id) ?? new Set<string>()
+    connections.add(clientId)
+    userConnections.set(user.id, connections)
+    clearPendingPresenceTimeout(user.id)
+  }
+
+  function schedulePresenceOffline(userId: string) {
+    clearPendingPresenceTimeout(userId)
+    presenceTimeouts.set(
+      userId,
+      setTimeout(() => {
+        const connections = userConnections.get(userId)
+        if (connections && connections.size > 0) {
+          return
+        }
+
+        const presence = userPresence.get(userId)
+        if (!presence) {
+          return
+        }
+
+        presence.status = "offline"
+        presence.lastSeen = Date.now()
+        broadcastPresenceUpdate(presence)
+        userPresence.delete(userId)
+      }, PRESENCE_GRACE_PERIOD),
+    )
+  }
+
   function setupHeartbeat(clientId: string) {
     const client = clients.get(clientId)
     if (!client) return
@@ -83,13 +168,22 @@ export function createWebSocketServer(port: number = 3001) {
 
   function cleanupClient(clientId: string) {
     const client = clients.get(clientId)
-    if (client) {
-      if (client.heartbeatTimer) {
-        clearInterval(client.heartbeatTimer as any)
-      }
-      client.ws.close()
+    if (client?.heartbeatTimer) {
+      clearInterval(client.heartbeatTimer as any)
     }
-    clients.delete(clientId)
+
+    if (client?.userId) {
+      const connections = userConnections.get(client.userId)
+      if (connections) {
+        connections.delete(clientId)
+        if (connections.size === 0) {
+          userConnections.delete(client.userId)
+          schedulePresenceOffline(client.userId)
+        } else {
+          userConnections.set(client.userId, connections)
+        }
+      }
+    }
 
     // Remove from all rooms
     rooms.forEach((room) => {
@@ -98,18 +192,25 @@ export function createWebSocketServer(port: number = 3001) {
       }
     })
 
-    // Notify about presence update
-    if (client?.userId) {
-      userPresence.delete(client.userId)
-      broadcastToAll({
-        type: "presence_update",
-        payload: {
-          userId: client.userId,
-          status: "offline",
-        },
-        timestamp: Date.now(),
-      })
+    clients.delete(clientId)
+  }
+
+  function setUserOnline(user: User) {
+    const previousPresence = userPresence.get(user.id)
+    const nextPresence: PresenceRecord = {
+      userId: user.id,
+      displayName: user.displayName,
+      walletAddress: user.walletAddress,
+      avatarUrl: user.avatarUrl,
+      status: "online",
+      lastSeen: Date.now(),
     }
+    userPresence.set(user.id, nextPresence)
+
+    if (!previousPresence || previousPresence.status !== "online") {
+      broadcastPresenceUpdate(nextPresence)
+    }
+    return nextPresence
   }
 
   // Handle WebSocket connections
@@ -148,18 +249,11 @@ export function createWebSocketServer(port: number = 3001) {
               avatarUrl: message.payload.avatarUrl,
             }
 
-            userPresence.set(message.payload.userId, connection.user)
+            registerUserConnection(clientId, connection.user)
+            setUserOnline(connection.user)
 
-            // Broadcast presence update
-            broadcastToAll({
-              type: "presence_update",
-              payload: {
-                userId: message.payload.userId,
-                displayName: message.payload.displayName,
-                status: "online",
-              },
-              timestamp: Date.now(),
-            })
+            // Send a snapshot so late listeners can initialize immediately
+            sendPresenceSnapshot(ws)
             break
           }
 
@@ -308,6 +402,11 @@ export function createWebSocketServer(port: number = 3001) {
               },
               timestamp: Date.now(),
             })
+            break
+          }
+
+          case "request_presence_snapshot": {
+            sendPresenceSnapshot(ws)
             break
           }
 
