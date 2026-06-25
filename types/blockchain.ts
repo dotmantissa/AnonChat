@@ -14,9 +14,9 @@ export interface StellarTransactionResult {
   success: boolean;
   transactionHash?: string;
   feeCharged?: string;
-  /** The group memo embedded in the Stellar transaction (≤28 bytes). */
+  /** The group memo embedded in the Stellar transaction. */
   memoGroupId?: string;
-  /** The audit memo embedded in the Stellar transaction (≤28 bytes). */
+  /** The audit memo embedded in the Stellar transaction. */
   auditMemo?: string;
   error?: string;
 }
@@ -30,6 +30,7 @@ export type AuditEventType =
 export interface StellarTransaction {
   hash: string;
   memo: string;
+  memoType?: string;
   ledger: number;
   created_at: string;
 }
@@ -80,7 +81,7 @@ export interface GroupCreationResponse {
     stellar_tx_hash: string | null;
     metadata_hash?: string | null;
     blockchain_submitted_at?: string | null;
-    /** Compact group identifier embedded in the Stellar memo (≤28 bytes). */
+    /** Compact group identifier embedded in the Stellar memo. */
     memo_group_id?: string | null;
   };
   success: boolean;
