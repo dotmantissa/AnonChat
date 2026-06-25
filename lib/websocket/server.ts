@@ -412,6 +412,38 @@ export function createWebSocketServer(port: number = 3001) {
             break
           }
 
+          case "message_read": {
+            const readRoomId = message.payload.roomId
+            const readMessageId = message.payload.messageId
+            const readUserId = connection.userId
+
+            if (!readUserId) {
+              ws.send(
+                JSON.stringify({
+                  type: "error",
+                  payload: { message: "Not authenticated" },
+                  timestamp: Date.now(),
+                }),
+              )
+              break
+            }
+
+            // Broadcast read receipt to the room
+            // The actual read receipt will be persisted to the database via the REST API
+            broadcastToRoom(readRoomId, {
+              type: "message_read_receipt",
+              payload: {
+                messageId: readMessageId,
+                userId: readUserId,
+                displayName: connection.user?.displayName,
+                readAt: Date.now(),
+                roomId: readRoomId,
+              },
+              timestamp: Date.now(),
+            })
+            break
+          }
+
           case "typing": {
             const typingRoomId = message.payload.roomId
 
