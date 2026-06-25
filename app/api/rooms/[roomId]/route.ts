@@ -6,6 +6,8 @@ import { resolveRoomOwnerWallet } from "@/lib/auth/wallet-owner";
 import { computeHash } from "@/lib/blockchain/metadata-hash";
 import { submitMetadataHash, getTransactionExplorerUrl } from "@/lib/blockchain/stellar-service";
 import { GroupMetadata } from "@/types/blockchain";
+import { persistGroupTransactionMemo } from "@/lib/blockchain/memo-store";
+import { type SupabaseClient } from "@supabase/supabase-js";
 
 export async function GET(
   request: NextRequest,
@@ -157,6 +159,14 @@ export async function PATCH(
             memo_group_id: result.memoGroupId ?? null,
           })
           .eq("id", roomId);
+
+        if (result.memoGroupId) {
+          await persistGroupTransactionMemo(supabase as unknown as SupabaseClient, {
+            groupId: roomId,
+            memoGroupId: result.memoGroupId,
+            txHash: stellarTxHash,
+          });
+        }
       }
     } catch (blockchainError: any) {
       console.error("[rooms/[roomId]] PATCH blockchain submission error:", blockchainError);

@@ -134,6 +134,51 @@ describe("group verification logic", () => {
     expect(result.error).toBeNull();
   });
 
+  it("accepts Stellar memo type values returned as MEMO_TEXT", () => {
+    const metadata = buildGroupMetadata(baseRoom);
+    const transaction: StellarTransaction = {
+      hash: baseRoom.stellar_tx_hash!,
+      memo: deriveMemoGroupId(baseRoom.id),
+      memoType: "MEMO_TEXT",
+      ledger: 1,
+      created_at: "2026-01-01T00:00:00.000Z",
+    };
+
+    const result = evaluateGroupVerification(
+      {
+        ...baseRoom,
+        metadata_hash: computeHash(metadata),
+      },
+      transaction,
+    );
+
+    expect(result.verified).toBe(true);
+    expect(result.memoVerified).toBe(true);
+  });
+
+  it("rejects matching group memos when Stellar memo type is not text", () => {
+    const metadata = buildGroupMetadata(baseRoom);
+    const transaction: StellarTransaction = {
+      hash: baseRoom.stellar_tx_hash!,
+      memo: deriveMemoGroupId(baseRoom.id),
+      memoType: "MEMO_HASH",
+      ledger: 1,
+      created_at: "2026-01-01T00:00:00.000Z",
+    };
+
+    const result = evaluateGroupVerification(
+      {
+        ...baseRoom,
+        metadata_hash: computeHash(metadata),
+      },
+      transaction,
+    );
+
+    expect(result.verified).toBe(false);
+    expect(result.memoVerified).toBe(false);
+    expect(result.error).toContain("text memo");
+  });
+
   it("cannot spoof verification by omitting anchored metadata hash", () => {
     const transaction: StellarTransaction = {
       hash: baseRoom.stellar_tx_hash!,
