@@ -119,7 +119,7 @@ export async function GET(
     // Verify message exists and user has access to the room
     const { data: message, error: messageError } = await supabase
       .from("messages")
-      .select("id, room_id")
+      .select("id, room_id, user_id")
       .eq("id", messageId)
       .single()
 
