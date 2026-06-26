@@ -2,6 +2,7 @@
 export type WebSocketServerEventType =
   | "message"
   | "message_status_update"
+  | "message_read_receipt"
   | "room_join"
   | "room_leave"
   | "user_typing"
@@ -21,6 +22,7 @@ export type WebSocketClientEventType =
   | "leave_room"
   | "send_message"
   | "message_delivered"
+  | "message_read"
   | "typing"
   | "stop_typing"
   | "wallet_event"
