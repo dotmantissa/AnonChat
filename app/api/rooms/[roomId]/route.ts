@@ -2,7 +2,6 @@ import { type NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { consumeNonce, verifyWalletSignature } from "@/lib/auth/stellar-verify";
 import { validateRequiredFields, validateStellarAddress } from "@/lib/auth/validation";
-import { resolveRoomOwnerWallet } from "@/lib/auth/wallet-owner";
 import { requireGroupOwner } from "@/lib/middleware/group-ownership";
 import { computeHash } from "@/lib/blockchain/metadata-hash";
 import { submitMetadataHash, getTransactionExplorerUrl } from "@/lib/blockchain/stellar-service";
@@ -123,6 +122,7 @@ export async function PATCH(
       throw updateError || new Error("Failed to update room");
     }
 
+    // ── Fixed: owner_wallet variable mapping resolved below ──────────────────
     const metadata: GroupMetadata = {
       id: updatedRoom.id,
       name: updatedRoom.name,
@@ -130,7 +130,7 @@ export async function PATCH(
       created_by: updatedRoom.created_by,
       created_at: updatedRoom.created_at,
       is_private: updatedRoom.is_private,
-      owner_wallet: ownerWallet,
+      owner_wallet: updatedRoom.owner_wallet || walletAddress,
     };
 
     const currentMetadataHash = computeHash(metadata);
