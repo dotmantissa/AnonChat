@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { consumeNonce, verifyWalletSignature } from "@/lib/auth/stellar-verify";
 import { validateRequiredFields, validateStellarAddress } from "@/lib/auth/validation";
-import { resolveRoomOwnerWallet } from "@/lib/auth/wallet-owner";
+import { requireGroupOwner } from "@/lib/middleware/group-ownership";
 import { computeHash } from "@/lib/blockchain/metadata-hash";
 import { submitMetadataHash, getTransactionExplorerUrl } from "@/lib/blockchain/stellar-service";
 import { GroupMetadata } from "@/types/blockchain";
@@ -74,13 +74,15 @@ export async function PATCH(
       return NextResponse.json({ error: "Room not found" }, { status: 404 });
     }
 
-    const ownerWallet = await resolveRoomOwnerWallet(supabase, room);
-    if (!ownerWallet) {
-      return NextResponse.json({ error: "Cannot resolve room owner wallet" }, { status: 400 });
-    }
+    const ownerCheck = await requireGroupOwner({
+      supabase,
+      groupId: roomId,
+      callerWallet: walletAddress,
+      userId: user.id,
+    })
 
-    if (ownerWallet !== walletAddress) {
-      return NextResponse.json({ error: "Unauthorized: wallet does not own this room" }, { status: 403 });
+    if (ownerCheck instanceof NextResponse) {
+      return ownerCheck
     }
 
     const nonce = await consumeNonce(walletAddress);
@@ -122,6 +124,7 @@ export async function PATCH(
       throw updateError || new Error("Failed to update room");
     }
 
+    // ── Fixed: owner_wallet variable mapping resolved below ──────────────────
     const metadata: GroupMetadata = {
       id: updatedRoom.id,
       name: updatedRoom.name,
@@ -129,7 +132,7 @@ export async function PATCH(
       created_by: updatedRoom.created_by,
       created_at: updatedRoom.created_at,
       is_private: updatedRoom.is_private,
-      owner_wallet: ownerWallet,
+      owner_wallet: updatedRoom.owner_wallet || walletAddress,
     };
 
     const currentMetadataHash = computeHash(metadata);
