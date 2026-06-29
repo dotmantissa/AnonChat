@@ -78,7 +78,7 @@ export function createWebSocketServer(port: number = 3001) {
   }
 
   function setupNotificationBridge(httpServer: http.Server) {
-    httpServer.on("request", (req, res) => {
+    httpServer.on("request", (req: http.IncomingMessage, res: http.ServerResponse) => {
       if (req.method !== "POST" || req.url !== "/notify") {
         res.writeHead(404, { "Content-Type": "application/json" })
         res.end(JSON.stringify({ error: "Not found" }))
@@ -94,7 +94,7 @@ export function createWebSocketServer(port: number = 3001) {
       }
 
       let body = ""
-      req.on("data", (chunk) => {
+      req.on("data", (chunk: Buffer) => {
         body += chunk
       })
 
@@ -406,6 +406,37 @@ export function createWebSocketServer(port: number = 3001) {
                 messageId: deliveredMessageId,
                 status: "delivered",
                 roomId: deliveredRoomId,
+              },
+              timestamp: Date.now(),
+            })
+            break
+          }
+
+          case "edit_message": {
+            const editRoomId = message.payload.roomId
+            const editMessageId = message.payload.messageId
+            const editContent = message.payload.content
+            const editAuthorId = connection.userId
+
+            if (!editRoomId || !editMessageId || !editContent || !editAuthorId) {
+              ws.send(
+                JSON.stringify({
+                  type: "error",
+                  payload: { message: "Invalid edit request" },
+                  timestamp: Date.now(),
+                }),
+              )
+              break
+            }
+
+            broadcastToRoom(editRoomId, {
+              type: "message_edit",
+              payload: {
+                messageId: editMessageId,
+                userId: editAuthorId,
+                roomId: editRoomId,
+                content: editContent,
+                editedAt: Date.now(),
               },
               timestamp: Date.now(),
             })
