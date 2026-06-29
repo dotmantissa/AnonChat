@@ -79,8 +79,11 @@ export function memoMatchesGroup(roomId: string, onChainMemo: string): boolean {
   const expectedBuffer = Buffer.from(expected, "utf8");
   const actualBuffer = Buffer.from(onChainMemo, "utf8");
 
+  const expectedUint8 = Uint8Array.from(expectedBuffer);
+  const actualUint8 = Uint8Array.from(actualBuffer);
+
   return (
-    expectedBuffer.length === actualBuffer.length &&
-    timingSafeEqual(expectedBuffer, actualBuffer)
+    expectedUint8.length === actualUint8.length &&
+    timingSafeEqual(expectedUint8, actualUint8)
   );
 }

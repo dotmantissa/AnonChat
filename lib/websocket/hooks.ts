@@ -179,7 +179,7 @@ export function useWebSocketSend() {
       client.current.markAsDelivered(messageId, roomId);
     }, []),
     editMessage: useCallback((messageId: string, roomId: string, content: string) => {
-      client.current.editMessage(messageId, roomId, content);
+      return client.current.editMessage(messageId, roomId, content);
     }, []),
   };
 }
