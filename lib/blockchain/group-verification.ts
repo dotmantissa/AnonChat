@@ -125,6 +125,20 @@ export function evaluateGroupVerification(
     };
   }
 
+  const memoType = transaction.memoType?.toLowerCase();
+  if (memoType && memoType !== "text" && memoType !== "memo_text") {
+    return {
+      verified: false,
+      memoVerified: false,
+      walletOwnershipVerified: false,
+      currentMetadataHash,
+      blockchainMetadataHash,
+      transactionHash,
+      walletAddress,
+      error: "On-chain transaction memo must be a text memo",
+    };
+  }
+
   const memoVerified = memoMatchesGroup(room.id, transaction.memo);
   if (!memoVerified) {
     return {

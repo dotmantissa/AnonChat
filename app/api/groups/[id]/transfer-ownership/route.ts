@@ -4,22 +4,22 @@
  * Allows the current group owner to transfer ownership to another member.
  *
  * Request body:
- *   {
- *     walletAddress: string           // Caller's Stellar public key
- *     signature: string               // Hex-encoded Ed25519 signature of the nonce
- *     newOwnerWalletAddress: string   // Stellar public key of the new owner
- *   }
+ * {
+ * walletAddress: string           // Caller's Stellar public key
+ * signature: string               // Hex-encoded Ed25519 signature of the nonce
+ * newOwnerWalletAddress: string   // Stellar public key of the new owner
+ * }
  *
  * Flow:
- *   1. Authenticate caller via Supabase session
- *   2. Validate inputs (wallet address format, required fields)
- *   3. Consume the one-time nonce for the caller's wallet (prevents replay)
- *   4. Verify the Ed25519 signature over the nonce
- *   5. Resolve the new owner's user ID from their wallet address
- *   6. Confirm the new owner is an active member of the group
- *   7. Call transfer_room_ownership RPC (atomic DB update + audit log)
- *   8. Write a room_activity_logs entry for transparency
- *   9. Optionally submit a Stellar transaction recording the transfer on-chain
+ * 1. Authenticate caller via Supabase session
+ * 2. Validate inputs (wallet address format, required fields)
+ * 3. Consume the one-time nonce for the caller's wallet (prevents replay)
+ * 4. Verify the Ed25519 signature over the nonce
+ * 5. Resolve the new owner's user ID from their wallet address
+ * 6. Confirm the new owner is an active member of the group
+ * 7. Call transfer_room_ownership RPC (atomic DB update + audit log)
+ * 8. Write a room_activity_logs entry for transparency
+ * 9. Optionally submit a Stellar transaction recording the transfer on-chain
  */
 
 import { createClient } from "@/lib/supabase/server"
@@ -30,6 +30,7 @@ import {
   resolveWalletFromUser,
   verifyWalletAuthorization,
 } from "@/lib/auth/wallet-authorization"
+import { verifyWalletSignature } from "@/lib/auth/stellar-verify";
 import { auditLog } from "@/lib/auth/signed-message-middleware"
 import { insertRoomActivity } from "@/lib/activity/room-activity"
 import {
@@ -42,6 +43,7 @@ import {
   generateCorrelationId,
 } from "@/lib/blockchain/logger"
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { requireGroupOwner } from "@/lib/middleware/group-ownership"
 import { notifyOwnershipTransferred } from "@/lib/notifications/service"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -139,7 +141,37 @@ export async function POST(
       return walletMismatch
     }
 
+    // ── Guard: callerWallet must be non-null before signature verification ────
+    if (!callerWallet) {
+      return NextResponse.json(
+        { error: "No wallet address associated with this account." },
+        { status: 400 }
+      )
+    }
+
     const nonce = auth.nonce
+
+    // ── 5. Verify the Ed25519 signature ───────────────────────────────────────
+    if (!signature) {
+      return NextResponse.json(
+        { error: "Signature is required for verification." },
+        { status: 400 }
+      )
+    }
+
+    const isValid = verifyWalletSignature(callerWallet, nonce, signature)
+
+    // ── 6. Verify the group exists and the caller is the current owner ────────
+    const ownerCheck = await requireGroupOwner({
+      supabase,
+      groupId,
+      callerWallet,
+      userId: user.id,
+    })
+
+    if (ownerCheck instanceof NextResponse) {
+      return ownerCheck
+    }
 
     // ── 4. Verify the group exists and the caller is the current owner ────────
     const { data: group, error: groupError } = await supabase

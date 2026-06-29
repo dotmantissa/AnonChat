@@ -78,7 +78,7 @@ export function createWebSocketServer(port: number = 3001) {
   }
 
   function setupNotificationBridge(httpServer: http.Server) {
-    httpServer.on("request", (req, res) => {
+    httpServer.on("request", (req: http.IncomingMessage, res: http.ServerResponse) => {
       if (req.method !== "POST" || req.url !== "/notify") {
         res.writeHead(404, { "Content-Type": "application/json" })
         res.end(JSON.stringify({ error: "Not found" }))
@@ -94,7 +94,7 @@ export function createWebSocketServer(port: number = 3001) {
       }
 
       let body = ""
-      req.on("data", (chunk) => {
+      req.on("data", (chunk: Buffer) => {
         body += chunk
       })
 
@@ -437,6 +437,38 @@ export function createWebSocketServer(port: number = 3001) {
                 roomId: editRoomId,
                 content: editContent,
                 editedAt: Date.now(),
+              },
+              timestamp: Date.now(),
+            })
+            break
+          }
+
+          case "message_read": {
+            const readRoomId = message.payload.roomId
+            const readMessageId = message.payload.messageId
+            const readUserId = connection.userId
+
+            if (!readUserId) {
+              ws.send(
+                JSON.stringify({
+                  type: "error",
+                  payload: { message: "Not authenticated" },
+                  timestamp: Date.now(),
+                }),
+              )
+              break
+            }
+
+            // Broadcast read receipt to the room
+            // The actual read receipt will be persisted to the database via the REST API
+            broadcastToRoom(readRoomId, {
+              type: "message_read_receipt",
+              payload: {
+                messageId: readMessageId,
+                userId: readUserId,
+                displayName: connection.user?.displayName,
+                readAt: Date.now(),
+                roomId: readRoomId,
               },
               timestamp: Date.now(),
             })
